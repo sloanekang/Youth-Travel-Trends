@@ -183,6 +183,13 @@
         </div>
         <p class="desc">비짓제주 <b>장소·행사명별 수치 합계</b>(키워드 단위 아님). 검색 수치는 관심의 지표일 뿐 실제 방문·선호를 의미하지 않음. 연령 구분 없음.</p>
         <p class="fine" id="search-scope"></p>
+        <p class="hint">👆 워드클라우드 단어 · 막대 · 표의 행을 누르면 그 검색어의 상세 정보가 열립니다.</p>
+        <div class="sdetail" id="search-detail" hidden aria-live="polite">
+          <div class="sd-head"><div id="sd-title"></div><button type="button" class="sd-close" id="sd-close" aria-label="검색어 상세 닫기">×</button></div>
+          <div id="sd-info"></div>
+          <div class="chart-box h180"><canvas id="c-sdetail"></canvas></div>
+          <div class="sd-actions" id="sd-actions"></div>
+        </div>
         <div class="wc-box"><canvas id="c-wc" width="760" height="340"></canvas><p class="notice" id="wc-fallback" hidden></p><p class="fine" id="wc-status"></p></div>
         <div class="chart-box h420"><canvas id="c-search"></canvas></div>
         <p class="notice" id="search-empty" hidden></p>

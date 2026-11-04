@@ -176,16 +176,39 @@
   // 사이드바 메뉴: 현재 보이는 섹션 강조, 모바일에서는 메뉴 열고 닫기
   const navLinks = [...document.querySelectorAll("#nav a")];
   const secs = navLinks.map((a) => document.querySelector(a.getAttribute("href")));
+  const setActive = (id) => navLinks.forEach((a) => {
+    const on = a.getAttribute("href") === "#" + id;
+    a.classList.toggle("active", on);
+    if (on) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current");
+  });
+  // 메뉴를 누른 직후에는 누른 항목을 유지한다(관광 검색어·온라인 후기처럼 나란히 놓인 카드가 같은 높이라
+  // 스크롤 위치만으로는 어느 쪽인지 구분되지 않음). 사용자가 직접 스크롤하면 다시 위치에 따라 바뀜
+  let navLock = 0;
+  const visible = new Set();
   if ("IntersectionObserver" in window) {
     const io = new IntersectionObserver((ents) => {
-      ents.forEach((en) => { if (en.isIntersecting) navLinks.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#" + en.target.id)); });
+      ents.forEach((en) => (en.isIntersecting ? visible.add(en.target.id) : visible.delete(en.target.id)));
+      if (Date.now() < navLock) return;
+      const first = secs.find((sec) => sec && visible.has(sec.id));
+      if (first) setActive(first.id);
     }, { rootMargin: "-30% 0px -60% 0px" });
     secs.forEach((sec) => sec && io.observe(sec));
   }
+  ["wheel", "touchmove", "keydown"].forEach((ev) => window.addEventListener(ev, () => { navLock = 0; }, { passive: true }));
   const setSidebar = (open) => { $("sidebar").classList.toggle("open", open); $("sb-backdrop").hidden = !open; $("sb-toggle").setAttribute("aria-expanded", String(open)); };
   $("sb-toggle").addEventListener("click", () => setSidebar(!$("sidebar").classList.contains("open")));
   $("sb-backdrop").addEventListener("click", () => setSidebar(false));
-  navLinks.forEach((a) => a.addEventListener("click", () => setSidebar(false)));
+  navLinks.forEach((a) => a.addEventListener("click", (e) => {
+    const id = a.getAttribute("href").slice(1), sec = document.getElementById(id);
+    if (!sec) return;
+    e.preventDefault();
+    setActive(id);
+    navLock = Date.now() + 1500;
+    sec.scrollIntoView({ behavior: "smooth", block: "start" });
+    history.replaceState(null, "", "#" + id);
+    if (sec.classList.contains("card")) { sec.classList.remove("focus-flash"); void sec.offsetWidth; sec.classList.add("focus-flash"); }
+    setSidebar(false);
+  }));
   $("f-reset").addEventListener("click", () => { Object.assign(S, DEFAULT); syncControls(); render(); });
 
   const inRange = (m) => m >= S.start && m <= S.end;
@@ -492,7 +515,9 @@
         type: "bar",
         data: { labels: t10.map((r) => r.n), datasets: [{ label: `${PM_LABEL[S.pmetric]}(건)`, data: t10.map((r) => r[S.pmetric]), backgroundColor: C.purple, borderRadius: 6 }] },
         options: { indexAxis: "y", plugins: { title: { display: true, text: `인기 장소 TOP 10 — ${PM_LABEL[S.pmetric]}` },
-          tooltip: { callbacks: { afterLabel: (c) => `카테고리: ${t10[c.dataIndex].cat} · ${t10[c.dataIndex].emd}` } } },
+          tooltip: { callbacks: { afterLabel: (c) => `카테고리: ${t10[c.dataIndex].cat} · ${t10[c.dataIndex].emd}`, footer: () => "누르면 오른쪽 표에서 강조" } } },
+          onHover: (e, els) => { e.native.target.style.cursor = els.length ? "pointer" : "default"; },
+          onClick: (e, els) => { if (els.length) flashRow("t-place", t10[els[0].index].n); },
           scales: { x: { title: axisTitle(`${PM_LABEL[S.pmetric]}(건)`), ticks: { callback: (v) => fmt(v) } }, y: { title: axisTitle("목적지명") } } },
       });
       $("place-exact").textContent = pl.exact >= pl.rows.length ? `순위 검증: 상위 ${pl.rows.length}위 전체 확정 (후보 외 장소의 최대 가능값 ${fmt(pl.bound)} 이하)`
@@ -522,7 +547,9 @@
         type: "bar",
         data: { labels: t20.map((r) => r.n), datasets: [{ label: "비짓제주 수치 합계", data: t20.map((r) => r.v), backgroundColor: C.pink, borderRadius: 6 }] },
         options: { indexAxis: "y", plugins: { title: { display: true, text: "검색 수치 상위 20 (장소·행사명)" },
-          tooltip: { callbacks: { afterLabel: (c) => `분류: ${t20[c.dataIndex].c}` } } },
+          tooltip: { callbacks: { afterLabel: (c) => `분류: ${t20[c.dataIndex].c}`, footer: () => "누르면 상세 정보" } } },
+          onHover: (e, els) => { e.native.target.style.cursor = els.length ? "pointer" : "default"; },
+          onClick: (e, els) => { if (els.length) openSearchDetail(t20[els[0].index].c, t20[els[0].index].n); },
           scales: { x: { title: axisTitle("수치 합계(원본 단위 미표기)"), ticks: { callback: (v) => fmt(v) } }, y: { title: axisTitle("장소·행사명"), ticks: { autoSkip: false, font: { size: 11 } } } } },
       });
       const cv = $("c-wc");
@@ -536,6 +563,8 @@
           weightFactor: (v) => 11 + 30 * Math.sqrt((v - minV) / Math.max(1, maxV - minV)),
           fontFamily: "Malgun Gothic, Apple SD Gothic Neo, sans-serif", rotateRatio: 0, gridSize: 6, shrinkToFit: false,
           color: (w) => palette[(byName[w] || {}).c] || "#555", backgroundColor: "#fff",
+          hover: (item) => { cv.style.cursor = item ? "pointer" : "default"; cv.title = item ? `${item[0]} — 누르면 상세 정보` : ""; },
+          click: (item) => { const r = byName[item[0]]; if (r) openSearchDetail(r.c, r.n); },
         });
         wcStat.total = sr.rows.length; wcStat.drawn = 0; wcStat.skipped = 0;
         $("search-cats").textContent = "워드클라우드: 상위 60개 장소·행사명, 글자 크기 = 수치 합계(제곱근 비례), 색 = 분류(관광지 보라·음식점 주황·숙박 청록·쇼핑 분홍·축제/행사 파랑). 공간이 부족한 긴 이름은 생략될 수 있음(표에서 전체 확인). ";
@@ -553,6 +582,7 @@
       { label: "순위", num: 1, get: (r) => r.rank }, { label: "장소·행사명(원본 '지역명')", get: (r) => r.n }, { label: "분류", get: (r) => r.c },
       { label: "수치 합계", num: 1, get: (r) => fmt(r.v) }, { label: "원본 행 수", num: 1, get: (r) => r.rows }, { label: "주소", get: (r) => r.a }],
       sr.months.length ? sr.rows.slice(0, 30) : []);
+    renderSearchDetail(sr);
 
     const rv = renderReviews();
     renderOverview(pl, sr, rv);
@@ -708,14 +738,15 @@
       .sort((a, b) => b.n - a.n).slice(0, n).map((t) => ({ ...t, total: rv.n }));
   }
   function renderOverview(pl, sr, rv) {
-    const list = (rows, val, extra) => {
+    const list = (rows, val, extra, kind) => {
       if (!rows.length) return '<li class="na">선택 조건에 데이터가 없습니다.</li>';
       const mx = val(rows[0]) || 1;
-      return rows.slice(0, 5).map((r) => `<li><span class="nm" title="${esc(r.n)}">${esc(r.n)}<small>${esc(extra(r))}</small></span>` +
+      return rows.slice(0, 5).map((r) => `<li class="clk" tabindex="0" role="button" data-kind="${kind}" data-n="${esc(r.n)}" data-c="${esc(r.c || "")}" title="${esc(r.n)} — 누르면 ${kind === "search" ? "검색어 상세" : "인기 장소 표"}로 이동">` +
+        `<span class="nm">${esc(r.n)}<small>${esc(extra(r))}</small></span>` +
         `<span class="v">${fmt(val(r))}</span><div class="bar" style="width:${(val(r) / mx) * 100}%"></div></li>`).join("");
     };
-    $("ov-places").innerHTML = list(pl.rows, (r) => r[S.pmetric], (r) => r.emd);
-    $("ov-search").innerHTML = list(sr.rows, (r) => r.v, (r) => r.c);
+    $("ov-places").innerHTML = list(pl.rows, (r) => r[S.pmetric], (r) => r.emd, "place");
+    $("ov-search").innerHTML = list(sr.rows, (r) => r.v, (r) => r.c, "search");
     $("ov-search").classList.add("pink");
     const colors = [C.purple, C.pink, C.teal, C.amber, C.blue, C.purple];
     const t3 = topReviewTopics(rv, 3), t6 = topReviewTopics(rv, 6);
@@ -801,6 +832,95 @@
       '<p class="empty">선택 기간에 일치하는 읍면동·장소·검색 항목이 없습니다. (장소·검색어는 사전 집계 후보 안에서만 찾습니다)</p>';
     box.hidden = false;
   }
+  // ---------- 검색어 상세(워드클라우드·막대·표·TOP 5 클릭) ----------
+  let searchSel = null;
+  const baseName = (n) => n.replace(/\s*\(.*?\)\s*/g, " ").replace(/\s+/g, " ").trim();
+  function openSearchDetail(c, n) {
+    searchSel = { c, n };
+    renderSearchDetail(window.DASH_RESULT ? window.DASH_RESULT.search : null);
+    const card = $("search-detail");
+    card.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  function renderSearchDetail(sr) {
+    const V = D.search, card = $("search-detail");
+    const gi = searchSel ? V.items.findIndex((it) => it.c === searchSel.c && it.n === searchSel.n) : -1;
+    if (gi < 0) { card.hidden = true; drawChart("sdetail", "c-sdetail", null); return; }
+    const it = V.items[gi], vals = V.v[gi];
+    const idx = V.months.map((m, j) => (inRange(m) ? j : -1)).filter((j) => j >= 0);
+    const total = sum(idx.map((j) => vals[j])), rows = sum(idx.map((j) => V.rows[gi][j]));
+    const peakJ = idx.length ? idx.reduce((a, j) => (vals[j] > vals[a] ? j : a), idx[0]) : -1;
+    const row = sr && sr.rows.find((r) => r.c === it.c && r.n === it.n);
+    const rankTxt = !total ? "선택 기간 수치 없음" : row ? `${row.rank}위 / 상위 ${sr.rows.length}개` + (row.rank > sr.exact ? " (근사)" : "") : "현재 필터의 상위 60개 밖";
+    // 이름이 같은 인기 장소(괄호 설명을 뺀 이름이 정확히 같은 목적지) — 같은 장소인지는 추가 확인 필요
+    const pm = D.places.months.map((m, j) => (inRange(m) ? j : -1)).filter((j) => j >= 0);
+    const matches = D.places.dests.map((d, i) => ({ d, i })).filter((x) => x.d.n === baseName(it.n) || x.d.n === it.n)
+      .map((x) => ({ ...x, tour: sum(pm.map((j) => D.places.tour[x.i][j])) })).sort((a, b) => b.tour - a.tour);
+    const place = matches[0];
+    const reg = it.emd || it.sgg;
+    $("sd-title").innerHTML = `<h3>${esc(it.n)}<span class="cat">${esc(it.c)}</span></h3>`;
+    $("sd-info").innerHTML =
+      `<dl class="sd-stats"><div><dt>선택 기간 수치 합계</dt><dd>${fmt(total)}</dd></div><div><dt>순위</dt><dd>${esc(rankTxt)}</dd></div>` +
+      `<div><dt>최고 월</dt><dd>${peakJ >= 0 && vals[peakJ] ? `${ymLabel(V.months[peakJ])} ${fmt(vals[peakJ])}` : "-"}</dd></div>` +
+      `<div><dt>이름이 같은 장소 관광객 도착 수</dt><dd>${place ? `${fmt(place.tour)}건` : "해당 없음"}</dd></div></dl>` +
+      `<p class="sd-meta">주소: ${esc(it.a || "-")} · 지역 판별: ${esc(it.emd ? `${it.sgg} ${it.emd}` : it.sgg || "판별 불가")} · 원본 행 ${fmt(rows)}개 · 기간 ${esc(ymLabel(S.start))} ~ ${esc(ymLabel(S.end))}` +
+      (place ? ` · 도착 수는 인기 장소 데이터에서 이름이 같은 '${esc(place.d.n)}'(${esc(place.d.emd)}) 기준이며 같은 장소인지는 추가 확인 필요` : "") +
+      ` · 검색 수치는 관심 지표이며 방문 수가 아님</p>`;
+    card.hidden = false;
+    drawChart("sdetail", "c-sdetail", {
+      type: "bar",
+      data: { labels: V.months.map((m) => `${String(Math.floor(m / 100)).slice(2)}.${m % 100}`),
+        datasets: [{ label: "월별 수치", data: vals, borderRadius: 3,
+          backgroundColor: V.months.map((m) => (inRange(m) ? C.pink : "#e4dff2")) }] },
+      options: { plugins: { legend: { display: false }, title: { display: true, text: "월별 수치 (분홍 = 선택 기간)" },
+        tooltip: { callbacks: { title: (c) => ymLabel(V.months[c[0].dataIndex]), label: (c) => `수치 ${fmt(c.raw)}` } } },
+        scales: { x: { ticks: { autoSkip: true, maxRotation: 0, font: { size: 10 } } }, y: { ticks: { callback: (v) => fmt(v) } } } },
+    });
+    $("sd-actions").innerHTML =
+      (reg ? `<button type="button" data-act="region">${esc(it.emd || it.sgg)}(으)로 지역 필터</button>` : "") +
+      `<button type="button" data-act="scat">분류 '${esc(it.c)}'만 보기</button>` +
+      (place ? `<button type="button" data-act="place">인기 장소에서 '${esc(place.d.n)}' 보기</button>` : "") +
+      `<button type="button" data-act="table">아래 표에서 찾기</button>`;
+    $("sd-actions").dataset.placeEmd = place ? place.d.emd : "";
+    $("sd-actions").dataset.placeName = place ? place.d.n : "";
+    document.querySelectorAll("#t-search tbody tr").forEach((tr) => tr.classList.toggle("sel", tr.cells[1] && tr.cells[1].textContent === it.n && tr.cells[2].textContent === it.c));
+  }
+  $("sd-close").addEventListener("click", () => { searchSel = null; renderSearchDetail(null); });
+  $("sd-actions").addEventListener("click", (e) => {
+    const act = e.target.dataset.act;
+    if (!act || !searchSel) return;
+    const it = D.search.items.find((x) => x.c === searchSel.c && x.n === searchSel.n);
+    if (act === "region") { if (it.emd) { S.emd = it.emd; S.sgg = it.sgg; } else { S.sgg = it.sgg; S.emd = "all"; } syncControls(); render(); }
+    else if (act === "scat") { S.scat = it.c; syncControls(); render(); }
+    else if (act === "table") { flashRow("t-search", it.n); }
+    else if (act === "place") {
+      const emd = e.currentTarget.dataset.placeEmd, name = e.currentTarget.dataset.placeName;
+      if (!flashRow("t-place", name)) {
+        const em = D.region.emds.find((x) => x.name === emd);
+        if (em) { S.emd = em.name; S.sgg = em.sgg; syncControls(); render(); }
+        if (!flashRow("t-place", name)) document.getElementById("sec-places").scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  });
+  // 표 행 클릭: 검색어 → 상세, 인기 장소 → 행 강조
+  $("t-search").addEventListener("click", (e) => {
+    const tr = e.target.closest("tbody tr");
+    if (tr && tr.cells.length > 2) openSearchDetail(tr.cells[2].textContent, tr.cells[1].textContent);
+  });
+  $("t-place").addEventListener("click", (e) => {
+    const tr = e.target.closest("tbody tr");
+    if (tr) { tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); }
+  });
+  // 개요 TOP 5 클릭(마우스·Enter)
+  ["ov-places", "ov-search"].forEach((id) => {
+    const go = (li) => {
+      if (!li) return;
+      if (li.dataset.kind === "search") openSearchDetail(li.dataset.c, li.dataset.n);
+      else if (!flashRow("t-place", li.dataset.n)) document.getElementById("sec-places").scrollIntoView({ behavior: "smooth" });
+    };
+    $(id).addEventListener("click", (e) => go(e.target.closest("li.clk")));
+    $(id).addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e.target.closest("li.clk")); } });
+  });
+
   function flashRow(tableId, name) {
     const row = [...document.querySelectorAll(`#${tableId} tbody tr`)].find((tr) => [...tr.cells].some((td) => td.textContent === name));
     if (!row) return false;
@@ -825,8 +945,7 @@
       if (kind === "emd") document.getElementById("sec-region").scrollIntoView({ behavior: "smooth" });
       else if (!flashRow("t-place", v)) document.getElementById("sec-places").scrollIntoView({ behavior: "smooth" });
     } else {
-      S.scat = b.dataset.c; syncControls(); render();
-      if (!flashRow("t-search", v)) document.getElementById("sec-search").scrollIntoView({ behavior: "smooth" });
+      openSearchDetail(b.dataset.c, v);
     }
   });
 
