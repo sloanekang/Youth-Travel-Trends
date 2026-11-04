@@ -1,10 +1,13 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-guard="1">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>청년층 제주 관광 동향</title>
 <link rel="icon" href="data:,">
+<meta name="referrer" content="no-referrer">
+<!-- 로그인 확인: 세션이 없으면 다른 리소스보다 먼저 로그인 페이지로 이동 -->
+<script src="auth.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -14,146 +17,219 @@
 <script src="data.js"></script>
 </head>
 <body>
-<main class="wrap">
+<div class="app">
 
-  <!-- 헤더 -->
-  <section class="card head">
-    <h1>청년층 제주 관광 동향</h1>
-    <p class="q">청년층은 제주에서 어떤 여행을 하고 있을까? — 20대 방문 추이, 지역·장소 특성, 검색 관심 주제</p>
-    <dl class="meta">
-      <div><dt>분석 기간</dt><dd id="hdr-period">-</dd></div>
-      <div><dt>데이터 출처</dt><dd>제주 관광 데이터 파일 7종(와이어프레임 표기: 제주 AI 관광데이터허브), 비짓제주 · 온라인 후기: 네이버 블로그 검색 API(제목·요약문)</dd></div>
-      <div><dt>분석 대상</dt><dd>필터는 데이터에 해당 정보가 있는 패널에만 적용(패널 제목 옆 배지: 파랑=적용, 회색=데이터에 정보 없음) · 지역·장소·검색 데이터는 연령 정보가 없어 <b>전체 관광객</b> 기준</dd></div>
-    </dl>
-    <p id="lib-warn" class="notice" hidden></p>
-  </section>
-
-  <!-- 필터 -->
-  <section class="card">
-    <h2>필터</h2>
-    <div class="filters">
-      <div class="mp-field"><span class="lbl">시작 월</span><button type="button" class="mp-btn" id="f-start" aria-haspopup="dialog"></button></div>
-      <div class="mp-field"><span class="lbl">종료 월</span><button type="button" class="mp-btn" id="f-end" aria-haspopup="dialog"></button></div>
-      <label>연령대 <small>(방문 규모·추이·후기)</small><select id="f-age"></select></label>
-      <label>성별 <small>(방문 규모·추이)</small><select id="f-sex">
-        <option value="all">전체</option><option value="M">남성(M)</option><option value="W">여성(W)</option></select></label>
-      <label>시군구 <small>(방문 규모·추이·지역·장소·검색어·후기)</small><select id="f-sgg"></select></label>
-      <label>읍면동 <small>(〃, 검색어·후기는 읍·면만)</small><select id="f-emd"></select></label>
-      <label>내·외국인 <small>(입도객·추이·지역별 방문)</small><select id="f-visitor">
-        <option value="tot">전체(내국인+외국인)</option><option value="dom">내국인</option><option value="for">외국인</option></select></label>
-      <label>장소 집계 기준 <small>(인기 장소)</small><select id="f-pmetric">
-        <option value="tour">관광객 도착 수</option><option value="res">도민 도착 수</option><option value="all">도착건수(전체)</option></select></label>
-      <label>검색 분류 <small>(관광 검색어)</small><select id="f-scat"></select></label>
-      <button id="f-reset" type="button">초기화</button>
+  <!-- 사이드바: 메뉴 + 공통 필터 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">J</span>
+      <div><b>JEJU YOUTH</b><small>청년층 제주 관광 동향</small></div>
     </div>
-    <p id="period-warn" class="notice" hidden></p>
-    <div id="mp-pop" class="mp-pop" role="dialog" aria-label="월 선택" hidden>
-      <div class="mp-head"><button type="button" id="mp-prev" aria-label="이전 연도">◀</button><b id="mp-year"></b><button type="button" id="mp-next" aria-label="다음 연도">▶</button></div>
-      <div class="mp-grid" id="mp-grid"></div>
-      <div class="mp-foot" id="mp-foot"></div>
-    </div>
-  </section>
+    <nav class="nav" id="nav" aria-label="섹션">
+      <a href="#overview" class="active"><svg viewBox="0 0 24 24"><path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/></svg>개요</a>
+      <a href="#sec-region"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>지역별 방문</a>
+      <a href="#sec-places"><svg viewBox="0 0 24 24"><path d="M12 17.3 18.2 21l-1.6-7L22 9.2l-7.2-.6L12 2 9.2 8.6 2 9.2 7.4 14l-1.6 7z"/></svg>인기 장소</a>
+      <a href="#sec-search"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>관광 검색어</a>
+      <a href="#sec-reviews"><svg viewBox="0 0 24 24"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg>온라인 후기</a>
+      <a href="#sec-summary"><svg viewBox="0 0 24 24"><path d="M9 21h6v-2H9zm3-19a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>분석 결과</a>
+      <a href="#sec-sources"><svg viewBox="0 0 24 24"><path d="M12 3C7 3 3 4.8 3 7v10c0 2.2 4 4 9 4s9-1.8 9-4V7c0-2.2-4-4-9-4zm0 2c4.4 0 7 1.4 7 2s-2.6 2-7 2-7-1.4-7-2 2.6-2 7-2z"/></svg>데이터 기준</a>
+    </nav>
 
-  <!-- 핵심 지표 -->
-  <section class="kpis">
-    <div class="card kpi"><h2>방문 규모</h2>
-      <div class="big" id="k-visit">-</div><p class="sub" id="k-visit-sub"></p><p class="sub reg" id="k-visit-reg" hidden></p></div>
-    <div class="card kpi"><h2>전년 동월 대비 증감률</h2>
-      <div class="big" id="k-yoy">-</div><p class="sub" id="k-yoy-sub"></p><p class="sub reg" id="k-yoy-reg" hidden></p></div>
-    <div class="card kpi"><h2>전체 연령 중 비중</h2>
-      <div class="big" id="k-share">-</div><p class="sub" id="k-share-sub"></p><p class="sub reg" id="k-share-reg" hidden></p></div>
-    <div class="card kpi"><h2>참고: 입도 관광객 수</h2>
-      <div class="big" id="k-inb">-</div><p class="sub" id="k-inb-sub"></p></div>
-  </section>
-
-  <!-- 방문 추이 -->
-  <section class="card">
-    <h2>방문 추이 <span class="badges" id="b-trend"></span></h2>
-    <p class="desc" id="trend-desc"></p>
-    <div class="pair">
-      <div><div class="chart-box h300"><canvas id="c-trend"></canvas></div><p class="notice" id="trend-empty" hidden></p></div>
-      <div><div class="chart-box h300"><canvas id="c-trend-reg"></canvas></div><p class="notice" id="trend-reg-empty" hidden></p></div>
-    </div>
-    <details><summary>상세 표</summary><div id="t-trend"></div><div id="t-trend-reg"></div></details>
-  </section>
-
-  <!-- 지역별 방문 -->
-  <section class="card">
-    <h2>지역별 방문 <span class="badges" id="b-region"></span></h2>
-    <p class="desc">읍면동별 방문객 수 합계(선택 기간) · 연령 구분 없음(전체 관광객) · 지도 경계: 행정동 경계(vuski/admdongkor 2026.07)를 읍면동코드로 연결 · 지도에서 읍면동을 누르면 필터가 바뀜</p>
-    <p class="notice" id="map-warn" hidden></p>
-    <div class="pair">
-      <div id="region-map" class="map"></div>
-      <div class="chart-box pair-h" id="region-box"><canvas id="c-region"></canvas></div>
-    </div>
-    <p class="notice" id="region-empty" hidden></p>
-    <div class="top5"><h3>인기 지역 TOP 5</h3><ol id="region-top5"></ol>
-      <p class="fine">비중 = 표시 범위 읍면동 합계 대비. 한 사람이 여러 읍면동에서 집계될 수 있어 인원 비율이 아님. 막대그래프는 상위 15개(선택 읍면동 포함), 전체는 상세 표.</p></div>
-    <details><summary>상세 표 (전체 읍면동)</summary><div id="t-region"></div></details>
-  </section>
-
-  <!-- 인기 장소 -->
-  <section class="card">
-    <h2>인기 장소 <span class="badges" id="b-place"></span></h2>
-    <p class="desc" id="place-desc"></p>
-    <p class="notice" id="place-empty" hidden></p>
-    <div class="pair">
-      <div class="chart-box pair-h"><canvas id="c-place"></canvas></div>
-      <div><h3>순위 표 (상위 20)</h3><div id="t-place" class="pair-tbl"></div></div>
-    </div>
-    <p class="fine" id="place-exact"></p>
-  </section>
-
-  <div class="grid2">
-    <!-- 관광 검색어 -->
-    <section class="card">
-      <h2>관광 검색어 <span class="badges" id="b-search"></span></h2>
-      <p class="desc">비짓제주 <b>장소·행사명별 수치 합계</b>(키워드 단위 아님). 검색 수치는 관심의 지표일 뿐 실제 방문·선호를 의미하지 않음. 연령 구분 없음.</p>
-      <p class="fine" id="search-scope"></p>
-      <div class="wc-box"><canvas id="c-wc" width="760" height="340"></canvas><p class="notice" id="wc-fallback" hidden></p><p class="fine" id="wc-status"></p></div>
-      <div class="chart-box h420"><canvas id="c-search"></canvas></div>
-      <p class="notice" id="search-empty" hidden></p>
-      <p class="fine" id="search-exact"></p>
-      <p class="fine" id="search-cats"></p>
-      <details><summary>키워드(장소명) 빈도 표 (상위 30)</summary><div id="t-search"></div></details>
-    </section>
-
-    <!-- 온라인 후기 -->
-    <section class="card">
-      <h2>온라인 후기 <span class="badges" id="b-review"></span></h2>
-      <p class="desc" id="review-desc"></p>
-      <label class="chk"><input type="checkbox" id="f-rall"> 기간 필터 무시하고 전체 수집 기간(2012~2026) 보기</label>
-      <p class="notice" id="review-empty" hidden></p>
-      <div class="rev">
-        <div><h3>주요 활동</h3><ul class="tl" id="r-activity"></ul></div>
-        <div><h3>만족 요인</h3><ul class="tl" id="r-satisfaction"></ul></div>
-        <div><h3>불편 사항</h3><ul class="tl" id="r-complaint"></ul></div>
+    <div class="sb-filters">
+      <h2>필터</h2>
+      <div class="sb-field">
+        <span class="lbl">기간</span>
+        <div class="mp-pair">
+          <button type="button" class="mp-btn" id="f-start" aria-haspopup="dialog" aria-label="시작 월"></button>
+          <span>~</span>
+          <button type="button" class="mp-btn" id="f-end" aria-haspopup="dialog" aria-label="종료 월"></button>
+        </div>
+        <div class="range" id="range">
+          <div class="range-track"><div class="range-fill" id="range-fill"></div></div>
+          <input type="range" id="f-range-a" min="0" max="0" step="1" aria-label="시작 월 슬라이더">
+          <input type="range" id="f-range-b" min="0" max="0" step="1" aria-label="종료 월 슬라이더">
+        </div>
+        <div class="range-lbl"><span id="range-min"></span><span id="range-max"></span></div>
       </div>
-      <h3 class="mt">여행 형태 · 계기 · 이동 방식</h3>
-      <ul class="tl ctx" id="r-context"></ul>
-      <p class="fine">막대 = 분석 대상 글 중 해당 주제 키워드가 제목·요약문에 나온 글 비율. 감성 분석이 아니라 <b>언급</b> 집계이며, 요약문이 짧아(약 200자) 실제 언급보다 적게 잡힘. 주제를 누르면 근거 문장과 원문 링크를 볼 수 있음.</p>
-      <details><summary>수집·선별 과정과 분석 대상 글 목록</summary><div id="t-review-funnel"></div><div id="t-review"></div></details>
-    </section>
+      <label class="sb-field"><span class="lbl">연령대 <small>방문 규모·추이·후기</small></span><select id="f-age"></select></label>
+      <label class="sb-field"><span class="lbl">성별 <small>방문 규모·추이</small></span><select id="f-sex">
+        <option value="all">전체</option><option value="M">남성(M)</option><option value="W">여성(W)</option></select></label>
+      <label class="sb-field"><span class="lbl">시군구 <small>지역 연동 패널 전체</small></span><select id="f-sgg"></select></label>
+      <label class="sb-field"><span class="lbl">읍면동 <small>검색어·후기는 읍·면만</small></span><select id="f-emd"></select></label>
+      <label class="sb-field"><span class="lbl">내·외국인 <small>입도객·지역 방문</small></span><select id="f-visitor">
+        <option value="tot">전체(내국인+외국인)</option><option value="dom">내국인</option><option value="for">외국인</option></select></label>
+      <button id="f-reset" type="button" class="btn-reset">필터 초기화</button>
+    </div>
+    <p class="sb-note">파란 배지 = 그 패널에 적용된 필터 · 회색 = 데이터에 해당 정보 없음</p>
+  </aside>
+
+  <div id="mp-pop" class="mp-pop" role="dialog" aria-label="월 선택" hidden>
+    <div class="mp-head"><button type="button" id="mp-prev" aria-label="이전 연도">◀</button><b id="mp-year"></b><button type="button" id="mp-next" aria-label="다음 연도">▶</button></div>
+    <div class="mp-grid" id="mp-grid"></div>
+    <div class="mp-foot" id="mp-foot"></div>
   </div>
 
-  <!-- 분석 결과 -->
-  <section class="card">
-    <h2>분석 결과 요약 <small class="desc">(현재 필터 기준 자동 계산)</small></h2>
-    <div class="summary">
-      <div><h3>확인된 사실</h3><ul id="s-fact"></ul></div>
-      <div><h3>해석 및 가설 <small>(검증 전)</small></h3><ul id="s-interp"></ul></div>
-      <div><h3>추가 확인 사항</h3><ul id="s-check"></ul></div>
-      <div><h3>실행 제안 <small>(효과 검증 전)</small></h3><ul id="s-action"></ul></div>
-    </div>
-  </section>
+  <main class="main">
+    <!-- 상단 바 -->
+    <header class="topbar">
+      <button type="button" class="sb-toggle" id="sb-toggle" aria-label="메뉴 열기" aria-controls="sidebar" aria-expanded="false"><span></span><span></span><span></span></button>
+      <div class="tb-title">
+        <h1>청년층은 제주에서 어떤 여행을 하고 있을까?</h1>
+        <p id="hdr-period">-</p>
+      </div>
+      <div class="pills" id="tb-presets" role="group" aria-label="기간 빠른 선택"></div>
+      <div class="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
+        <input type="search" id="q-search" placeholder="장소·검색어·읍면동 찾기" autocomplete="off" aria-label="장소·검색어·읍면동 찾기">
+        <div class="q-results" id="q-results" hidden></div>
+      </div>
+      <div class="user"><span class="avatar" aria-hidden="true">👤</span><span id="u-id"></span><button type="button" id="u-logout">로그아웃</button></div>
+    </header>
 
-  <!-- 데이터 기준 -->
-  <section class="card">
-    <h2>데이터 기준 · 집계 방식</h2>
-    <div id="t-sources"></div>
-    <p class="fine" id="gen-time"></p>
-  </section>
-</main>
+    <p id="lib-warn" class="notice" hidden></p>
+    <p id="period-warn" class="notice" hidden></p>
+
+    <!-- 개요 -->
+    <section id="overview" class="sec">
+      <div class="kpis">
+        <div class="card kpi">
+          <h2>방문 규모</h2>
+          <div class="big" id="k-visit">-</div><p class="sub" id="k-visit-sub"></p><p class="sub reg" id="k-visit-reg" hidden></p>
+        </div>
+        <div class="card kpi">
+          <h2>전년 동월 대비 증감률</h2>
+          <div class="big" id="k-yoy">-</div><p class="sub" id="k-yoy-sub"></p><p class="sub reg" id="k-yoy-reg" hidden></p>
+        </div>
+        <div class="card kpi kpi-ring">
+          <h2>전체 연령 중 비중</h2>
+          <div class="ring-row"><div class="ring" id="k-share-ring"></div><div class="big" id="k-share">-</div></div>
+          <p class="sub" id="k-share-sub"></p><p class="sub reg" id="k-share-reg" hidden></p>
+        </div>
+        <div class="card kpi kpi-ring">
+          <h2>여름(7~8월) 집중도</h2>
+          <div class="ring-row"><div class="ring" id="k-summer-ring"></div><div class="big" id="k-summer">-</div></div>
+          <p class="sub" id="k-summer-sub"></p>
+        </div>
+        <div class="card kpi">
+          <h2>참고: 입도 관광객 수</h2>
+          <div class="big" id="k-inb">-</div><p class="sub" id="k-inb-sub"></p>
+        </div>
+      </div>
+
+      <div class="ov-grid">
+        <section class="card" id="sec-trend">
+          <div class="card-head"><h2>방문 추이 <span class="badges" id="b-trend"></span></h2></div>
+          <p class="desc" id="trend-desc"></p>
+          <div class="chart-box h260"><canvas id="c-trend"></canvas></div><p class="notice" id="trend-empty" hidden></p>
+          <div class="chart-box h220 mt"><canvas id="c-trend-reg"></canvas></div><p class="notice" id="trend-reg-empty" hidden></p>
+          <details><summary>상세 표</summary><div id="t-trend"></div><div id="t-trend-reg"></div></details>
+        </section>
+
+        <div class="ov-side">
+          <section class="card mini">
+            <div class="card-head"><h2>인기 장소 TOP 5</h2><a href="#sec-places" class="more">전체 보기</a></div>
+            <ol class="toplist" id="ov-places"></ol>
+          </section>
+          <section class="card mini">
+            <div class="card-head"><h2>검색 수치 TOP 5</h2><a href="#sec-search" class="more">전체 보기</a></div>
+            <ol class="toplist" id="ov-search"></ol>
+          </section>
+          <section class="card mini">
+            <div class="card-head"><h2>20대 후기 키워드</h2><a href="#sec-reviews" class="more">전체 보기</a></div>
+            <div class="ring-cards" id="ov-review"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- 지역별 방문 -->
+    <section class="card sec" id="sec-region">
+      <div class="card-head"><h2>지역별 방문 <span class="badges" id="b-region"></span></h2></div>
+      <p class="desc">읍면동별 방문객 수 합계(선택 기간) · 연령 구분 없음(전체 관광객) · 지도 경계: 행정동 경계(vuski/admdongkor 2026.07)를 읍면동코드로 연결 · 지도에서 읍면동을 누르면 필터가 바뀜</p>
+      <p class="notice" id="map-warn" hidden></p>
+      <div class="pair">
+        <div id="region-map" class="map"></div>
+        <div class="chart-box pair-h" id="region-box"><canvas id="c-region"></canvas></div>
+      </div>
+      <p class="notice" id="region-empty" hidden></p>
+      <div class="top5"><h3>인기 지역 TOP 5</h3><ol id="region-top5"></ol>
+        <p class="fine">비중 = 표시 범위 읍면동 합계 대비. 한 사람이 여러 읍면동에서 집계될 수 있어 인원 비율이 아님. 막대그래프는 상위 15개(선택 읍면동 포함), 전체는 상세 표.</p></div>
+      <details><summary>상세 표 (전체 읍면동)</summary><div id="t-region"></div></details>
+    </section>
+
+    <!-- 인기 장소 -->
+    <section class="card sec" id="sec-places">
+      <div class="card-head">
+        <h2>인기 장소 <span class="badges" id="b-place"></span></h2>
+        <label class="inline-filter">집계 기준<select id="f-pmetric">
+          <option value="tour">관광객 도착 수</option><option value="res">도민 도착 수</option><option value="all">도착건수(전체)</option></select></label>
+      </div>
+      <p class="desc" id="place-desc"></p>
+      <p class="notice" id="place-empty" hidden></p>
+      <div class="pair">
+        <div class="chart-box pair-h"><canvas id="c-place"></canvas></div>
+        <div><h3>순위 표 (상위 20)</h3><div id="t-place" class="pair-tbl"></div></div>
+      </div>
+      <p class="fine" id="place-exact"></p>
+    </section>
+
+    <div class="grid2">
+      <!-- 관광 검색어 -->
+      <section class="card sec" id="sec-search">
+        <div class="card-head">
+          <h2>관광 검색어 <span class="badges" id="b-search"></span></h2>
+          <label class="inline-filter">분류<select id="f-scat"></select></label>
+        </div>
+        <p class="desc">비짓제주 <b>장소·행사명별 수치 합계</b>(키워드 단위 아님). 검색 수치는 관심의 지표일 뿐 실제 방문·선호를 의미하지 않음. 연령 구분 없음.</p>
+        <p class="fine" id="search-scope"></p>
+        <div class="wc-box"><canvas id="c-wc" width="760" height="340"></canvas><p class="notice" id="wc-fallback" hidden></p><p class="fine" id="wc-status"></p></div>
+        <div class="chart-box h420"><canvas id="c-search"></canvas></div>
+        <p class="notice" id="search-empty" hidden></p>
+        <p class="fine" id="search-exact"></p>
+        <p class="fine" id="search-cats"></p>
+        <details><summary>키워드(장소명) 빈도 표 (상위 30)</summary><div id="t-search"></div></details>
+      </section>
+
+      <!-- 온라인 후기 -->
+      <section class="card sec" id="sec-reviews">
+        <div class="card-head"><h2>온라인 후기 <span class="badges" id="b-review"></span></h2></div>
+        <p class="desc" id="review-desc"></p>
+        <label class="chk"><input type="checkbox" id="f-rall"> 기간 필터 무시하고 전체 수집 기간(2012~2026) 보기</label>
+        <p class="notice" id="review-empty" hidden></p>
+        <div class="ring-cards wide" id="r-rings"></div>
+        <div class="rev">
+          <div><h3>주요 활동</h3><ul class="tl" id="r-activity"></ul></div>
+          <div><h3>만족 요인</h3><ul class="tl" id="r-satisfaction"></ul></div>
+          <div><h3>불편 사항</h3><ul class="tl" id="r-complaint"></ul></div>
+        </div>
+        <h3 class="mt">여행 형태 · 계기 · 이동 방식</h3>
+        <ul class="tl ctx" id="r-context"></ul>
+        <p class="fine">막대·링 = 분석 대상 글 중 해당 주제 키워드가 제목·요약문에 나온 글 비율. 감성 분석이 아니라 <b>언급</b> 집계이며, 요약문이 짧아(약 200자) 실제 언급보다 적게 잡힘. 주제를 누르면 근거 문장과 원문 링크를 볼 수 있음.</p>
+        <details><summary>수집·선별 과정과 분석 대상 글 목록</summary><div id="t-review-funnel"></div><div id="t-review"></div></details>
+      </section>
+    </div>
+
+    <!-- 분석 결과 -->
+    <section class="card sec" id="sec-summary">
+      <div class="card-head"><h2>분석 결과 요약 <small class="desc">(현재 필터 기준 자동 계산)</small></h2></div>
+      <div class="summary">
+        <div><h3>확인된 사실</h3><ul id="s-fact"></ul></div>
+        <div><h3>해석 및 가설 <small>(검증 전)</small></h3><ul id="s-interp"></ul></div>
+        <div><h3>추가 확인 사항</h3><ul id="s-check"></ul></div>
+        <div><h3>실행 제안 <small>(효과 검증 전)</small></h3><ul id="s-action"></ul></div>
+      </div>
+    </section>
+
+    <!-- 데이터 기준 -->
+    <section class="card sec" id="sec-sources">
+      <div class="card-head"><h2>데이터 기준 · 집계 방식</h2></div>
+      <p class="desc">데이터 출처: 제주 관광 데이터 파일 7종(와이어프레임 표기: 제주 AI 관광데이터허브), 비짓제주 · 온라인 후기: 네이버 블로그 검색 API(제목·요약문). 지역·장소·검색 데이터는 연령 정보가 없어 전체 관광객 기준.</p>
+      <div id="t-sources"></div>
+      <p class="fine" id="gen-time"></p>
+    </section>
+  </main>
+  <div class="sb-backdrop" id="sb-backdrop" hidden></div>
+</div>
 <script src="app.js"></script>
 </body>
 </html>

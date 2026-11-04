@@ -25,7 +25,10 @@
   const SEX_LABEL = { all: "남녀 전체", M: "남성", W: "여성" };
   const VIS_LABEL = { tot: "전체(내국인+외국인)", dom: "내국인", for: "외국인" };
   const PM_LABEL = { tour: "관광객 도착 수", res: "도민 도착 수", all: "도착건수(전체)" };
-  const YEAR_COLORS = { 2024: "#2463eb", 2025: "#16a37f", 2026: "#e0832b" };
+  const YEAR_COLORS = { 2024: "#6d4fd8", 2025: "#e0569b", 2026: "#e8962e" };
+  const C = { purple: "#6d4fd8", pink: "#e0569b", teal: "#14a3a0", amber: "#e8962e", blue: "#3b82f6" };
+  const alpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, "0");
+  if (window.Chart) { Chart.defaults.font.family = '"Pretendard", "Malgun Gothic", sans-serif'; Chart.defaults.color = "#6b6488"; Chart.defaults.borderColor = "#ece8f8"; }
 
   function table(cols, rows, hlFn) {
     if (!rows.length) return '<p class="fine">표시할 데이터가 없습니다.</p>';
@@ -67,6 +70,7 @@
   }
   function syncControls() {
     $("f-start").textContent = ymLabel(S.start); $("f-end").textContent = ymLabel(S.end); $("f-age").value = S.age;
+    if (typeof syncRange === "function") { syncRange(); syncPresets(); }
     $("f-sex").value = S.sex; $("f-sgg").value = S.sgg; fillEmd();
     $("f-visitor").value = S.visitor; $("f-pmetric").value = S.pmetric; $("f-scat").value = S.scat;
     $("f-rall").checked = S.rall;
@@ -85,13 +89,12 @@
   const YEARS = [...new Set(allMonths.map((m) => Math.floor(m / 100)))];
   const mp = { target: null, year: null };
   const pop = $("mp-pop");
-  pop.parentElement.style.position = "relative";
   function openPicker(which) {
     if (mp.target === which && !pop.hidden) return closePicker();
     mp.target = which; mp.year = Math.floor(S[which] / 100);
-    const btn = $(`f-${which}`), host = pop.parentElement.getBoundingClientRect(), b = btn.getBoundingClientRect();
-    pop.style.left = Math.max(0, Math.min(b.left - host.left, host.width - 270)) + "px";
-    pop.style.top = b.bottom - host.top + 4 + "px";
+    const b = $(`f-${which}`).getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(b.left, window.innerWidth - 274)) + "px";
+    pop.style.top = Math.min(b.bottom + 6, window.innerHeight - 300) + "px";
     ["start", "end"].forEach((w) => $(`f-${w}`).setAttribute("aria-expanded", String(w === which)));
     pop.hidden = false; renderPicker();
   }
@@ -127,6 +130,49 @@
   pop.addEventListener("click", (e) => e.stopPropagation());
   document.addEventListener("click", () => { if (!pop.hidden) closePicker(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pop.hidden) closePicker(); });
+  window.addEventListener("resize", () => { if (!pop.hidden) closePicker(); });
+  $("sidebar").addEventListener("scroll", () => { if (!pop.hidden) closePicker(); });
+
+  // 기간 범위 슬라이더(월 단위). 끄는 동안은 표시만 바꾸고, 놓으면 반영
+  const ra = $("f-range-a"), rb = $("f-range-b");
+  ra.max = rb.max = String(allMonths.length - 1);
+  $("range-min").textContent = ymLabel(allMonths[0]); $("range-max").textContent = ymLabel(allMonths[allMonths.length - 1]);
+  function syncRange() {
+    const a = allMonths.indexOf(S.start), b = allMonths.indexOf(S.end), n = allMonths.length - 1;
+    ra.value = a; rb.value = b;
+    $("range-fill").style.left = (a / n) * 100 + "%"; $("range-fill").style.right = (100 - (b / n) * 100) + "%";
+  }
+  const sliderMonths = () => { const a = Math.min(+ra.value, +rb.value), b = Math.max(+ra.value, +rb.value); return [allMonths[a], allMonths[b]]; };
+  [ra, rb].forEach((el) => {
+    el.addEventListener("input", () => {
+      const [a, b] = sliderMonths(), n = allMonths.length - 1;
+      $("f-start").textContent = ymLabel(a); $("f-end").textContent = ymLabel(b);
+      $("range-fill").style.left = (allMonths.indexOf(a) / n) * 100 + "%"; $("range-fill").style.right = (100 - (allMonths.indexOf(b) / n) * 100) + "%";
+    });
+    el.addEventListener("change", () => { const [a, b] = sliderMonths(); setPeriod(a, b); });
+  });
+
+  // 상단 기간 빠른 선택
+  const PRESETS = YEARS.map((y) => [`${y}년`, Math.max(y * 100 + 1, allMonths[0]), Math.min(y * 100 + 12, allMonths[allMonths.length - 1])])
+    .concat([["전체", allMonths[0], allMonths[allMonths.length - 1]]]);
+  $("tb-presets").innerHTML = PRESETS.map(([t, a, b]) => `<button type="button" data-a="${a}" data-b="${b}">${t}</button>`).join("");
+  $("tb-presets").addEventListener("click", (e) => { if (e.target.dataset.a) setPeriod(Number(e.target.dataset.a), Number(e.target.dataset.b)); });
+  const syncPresets = () => $("tb-presets").querySelectorAll("button").forEach((btn) =>
+    btn.classList.toggle("on", Number(btn.dataset.a) === S.start && Number(btn.dataset.b) === S.end));
+
+  // 사이드바 메뉴: 현재 보이는 섹션 강조, 모바일에서는 메뉴 열고 닫기
+  const navLinks = [...document.querySelectorAll("#nav a")];
+  const secs = navLinks.map((a) => document.querySelector(a.getAttribute("href")));
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver((ents) => {
+      ents.forEach((en) => { if (en.isIntersecting) navLinks.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === "#" + en.target.id)); });
+    }, { rootMargin: "-30% 0px -60% 0px" });
+    secs.forEach((sec) => sec && io.observe(sec));
+  }
+  const setSidebar = (open) => { $("sidebar").classList.toggle("open", open); $("sb-backdrop").hidden = !open; $("sb-toggle").setAttribute("aria-expanded", String(open)); };
+  $("sb-toggle").addEventListener("click", () => setSidebar(!$("sidebar").classList.contains("open")));
+  $("sb-backdrop").addEventListener("click", () => setSidebar(false));
+  navLinks.forEach((a) => a.addEventListener("click", () => setSidebar(false)));
   $("f-reset").addEventListener("click", () => { Object.assign(S, DEFAULT); syncControls(); render(); });
 
   const inRange = (m) => m >= S.start && m <= S.end;
@@ -182,6 +228,18 @@
       }
     }
     return out;
+  }
+
+  // 여름(7~8월) 집중도: 선택 기간에 1~12월이 모두 들어간 연도만 계산
+  function calcSummer() {
+    const years = [...new Set(rangeMonths(D.age.months).map((m) => Math.floor(m / 100)))]
+      .filter((y) => Array.from({ length: 12 }, (_, i) => y * 100 + i + 1).every((m) => inRange(m) && D.age.months.includes(m)));
+    return years.map((y) => {
+      const ms = Array.from({ length: 12 }, (_, i) => y * 100 + i + 1);
+      const tot = sum(ms.map((m) => ageValue(m, S.age, S.sex))), all = sum(ms.map((m) => ageValue(m, "all", S.sex)));
+      return { y, share: (ageValue(y * 100 + 7, S.age, S.sex) + ageValue(y * 100 + 8, S.age, S.sex)) / tot,
+        allShare: (ageValue(y * 100 + 7, "all", S.sex) + ageValue(y * 100 + 8, "all", S.sex)) / all };
+    });
   }
 
   function calcTrendReg() {
@@ -287,8 +345,18 @@
 
     // KPI
     const k = calcKpi();
+    const ring = (id, v, color) => { const el = $(id); el.classList.toggle("na", v == null); el.style.setProperty("--p", v == null ? 0 : Math.max(0, Math.min(100, v * 100))); if (color) el.style.setProperty("--c", color); };
+    k.summer = calcSummer();
+    if (k.summer.length) {
+      const last = k.summer[k.summer.length - 1];
+      $("k-summer").textContent = pct(last.share, 2); ring("k-summer-ring", last.share, C.pink);
+      $("k-summer-sub").textContent = k.summer.map((x) => `${x.y}년 ${pct(x.share, 2)}(전체 연령 ${pct(x.allShare, 2)})`).join(" · ") + ` — ${ageLbl} 연간 방문 중 7·8월 비중`;
+    } else {
+      $("k-summer").innerHTML = '<span class="na-v">계산 불가</span>'; ring("k-summer-ring", null);
+      $("k-summer-sub").textContent = "1~12월이 모두 포함된 연도를 기간으로 선택하면 계산됩니다(예: 2024년, 2025년).";
+    }
     if (!k.months.length) {
-      ["k-visit", "k-yoy", "k-share"].forEach((id) => ($(id).innerHTML = '<span class="na-v">데이터 없음</span>'));
+      ["k-visit", "k-yoy", "k-share"].forEach((id) => ($(id).innerHTML = '<span class="na-v">데이터 없음</span>')); ring("k-share-ring", null);
       $("k-visit-sub").textContent = "선택 기간에 연령대별 방문 데이터가 없습니다.";
       $("k-yoy-sub").textContent = ""; $("k-share-sub").textContent = "";
     } else {
@@ -302,10 +370,10 @@
         $("k-yoy-sub").textContent = `비교 대상 전년 월 데이터 없음: ${k.missingPrev.map(ymLabel).join(", ")} (데이터는 2024년 1월부터)`;
       }
       if (k.share != null) {
-        $("k-share").textContent = pct(k.share);
+        $("k-share").textContent = pct(k.share); ring("k-share-ring", k.share, C.purple);
         $("k-share-sub").textContent = `${SEX_LABEL[S.sex]} 전체 연령(${fmt(k.allAges)}명) 중 ${AGE_LABEL(S.age)} 비중`;
       } else {
-        $("k-share").innerHTML = '<span class="na-v">-</span>';
+        $("k-share").innerHTML = '<span class="na-v">-</span>'; ring("k-share-ring", null);
         $("k-share-sub").textContent = "연령대를 선택하면 계산됩니다.";
       }
     }
@@ -322,35 +390,25 @@
     } else { $("k-inb").innerHTML = '<span class="na-v">데이터 없음</span>'; $("k-inb-sub").textContent = "선택 기간에 입도 관광객 데이터가 없습니다."; }
 
     // 방문 추이
-    const tr = calcTrend();
-    badges("b-trend", [["기간", 1], ["연령대·성별(왼쪽)", 1], ["지역·내외국인(오른쪽)", 1]]);
-    $("trend-desc").textContent = `왼쪽: 월별 ${ageLbl} 방문객 수(연령대별 방문 데이터, 지역 구분 없음) · 오른쪽: ${regionLabel()} 읍면동 방문객 수(연령 구분 없음, ${VIS_LABEL[S.visitor]}). 두 데이터는 집계 기준이 달라 서로 비교하지 않음. 연도별로 선을 나눠 같은 월끼리 비교.`;
-    if (!tr.length) { drawChart("trend", "c-trend", null); show("trend-empty", "선택 기간에 데이터가 없습니다."); }
-    else {
-      show("trend-empty", "");
-      const years = [...new Set(tr.map((r) => Math.floor(r.m / 100)))];
-      drawChart("trend", "c-trend", {
-        type: "line",
-        data: { labels: Array.from({ length: 12 }, (_, i) => `${i + 1}월`),
-          datasets: years.map((y) => ({ label: `${y}년`, borderColor: YEAR_COLORS[y] || "#888", backgroundColor: YEAR_COLORS[y] || "#888",
-            data: Array.from({ length: 12 }, (_, i) => { const r = tr.find((x) => x.m === y * 100 + i + 1); return r ? r.v : null; }),
-            spanGaps: false, tension: 0.25 })) },
-        options: { plugins: { title: { display: true, text: `월별 ${ageLbl} 방문객 수` }, legend: { position: "top" },
-          tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.raw)}명` } } },
-          scales: { x: { title: axisTitle("월") }, y: { title: axisTitle("방문객 수(명)"), ticks: { callback: (v) => fmt(v) } } } },
-      });
-    }
-    const trR = calcTrendReg();
     const lineCfg = (rows, title, unit) => {
       const years = [...new Set(rows.map((r) => Math.floor(r.m / 100)))];
       return { type: "line",
         data: { labels: Array.from({ length: 12 }, (_, i) => `${i + 1}월`),
-          datasets: years.map((y) => ({ label: `${y}년`, borderColor: YEAR_COLORS[y] || "#888", backgroundColor: YEAR_COLORS[y] || "#888",
+          datasets: years.map((y) => ({ label: `${y}년`, borderColor: YEAR_COLORS[y] || "#888", backgroundColor: alpha(YEAR_COLORS[y] || "#888888", 0.14), fill: true, pointRadius: 3, pointBackgroundColor: YEAR_COLORS[y] || "#888",
             data: Array.from({ length: 12 }, (_, i) => { const r = rows.find((x) => x.m === y * 100 + i + 1); return r ? r.v : null; }), tension: 0.25 })) },
         options: { plugins: { title: { display: true, text: title }, legend: { position: "top" },
           tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.raw)}${unit}` } } },
           scales: { x: { title: axisTitle("월") }, y: { title: axisTitle(`방문객 수(${unit})`), ticks: { callback: (v) => fmt(v) } } } } };
     };
+    const tr = calcTrend();
+    badges("b-trend", [["기간", 1], ["연령대·성별(위)", 1], ["지역·내외국인(아래)", 1]]);
+    $("trend-desc").textContent = `위: 월별 ${ageLbl} 방문객 수(연령대별 방문 데이터, 지역 구분 없음) · 아래: ${regionLabel()} 읍면동 방문객 수(연령 구분 없음, ${VIS_LABEL[S.visitor]}). 두 데이터는 집계 기준이 달라 서로 비교하지 않음. 연도별로 선을 나눠 같은 월끼리 비교.`;
+    if (!tr.length) { drawChart("trend", "c-trend", null); show("trend-empty", "선택 기간에 데이터가 없습니다."); }
+    else {
+      show("trend-empty", "");
+      drawChart("trend", "c-trend", lineCfg(tr, `월별 ${ageLbl} 방문객 수`, "명"));
+    }
+    const trR = calcTrendReg();
     if (!trR.length) { drawChart("trendReg", "c-trend-reg", null); show("trend-reg-empty", "선택 기간에 읍면동 방문객 데이터가 없습니다."); }
     else { show("trend-reg-empty", ""); drawChart("trendReg", "c-trend-reg", lineCfg(trR, `월별 ${regionLabel()} 방문객 수 — ${VIS_LABEL[S.visitor]} (연령 구분 없음)`, "명")); }
     $("t-trend-reg").innerHTML = `<h3 class="mt">${esc(regionLabel())} 읍면동 방문객(연령 구분 없음)</h3>` + table([
@@ -378,11 +436,11 @@
         type: "bar",
         data: { labels: bars.map((r) => (r.rank > 15 ? `${r.name} (${r.rank}위)` : r.name)), datasets: [{ label: `${VIS_LABEL[S.visitor]} 방문객 수(명)`,
           data: bars.map((r) => r[S.visitor]),
-          backgroundColor: bars.map((r) => (S.emd === r.name ? "#e0832b" : r.sgg === "제주시" ? "#2463eb" : "#16a37f")) }] },
+          backgroundColor: bars.map((r) => (S.emd === r.name ? C.amber : r.sgg === "제주시" ? C.purple : C.teal)), borderRadius: 6 }] },
         options: { indexAxis: "y", plugins: { title: { display: true, text: `${S.sgg === "all" ? "전체 지역" : S.sgg} 읍면동 방문객 상위 ${Math.min(15, rg.rows.length)} — ${VIS_LABEL[S.visitor]} (${rg.months.length}개월 합계)` },
           legend: { display: true, labels: { generateLabels: () => [
-            { text: "제주시", fillStyle: "#2463eb", strokeStyle: "#2463eb" }, { text: "서귀포시", fillStyle: "#16a37f", strokeStyle: "#16a37f" },
-            ...(S.emd !== "all" ? [{ text: `선택: ${S.emd}`, fillStyle: "#e0832b", strokeStyle: "#e0832b" }] : [])] } },
+            { text: "제주시", fillStyle: C.purple, strokeStyle: C.purple }, { text: "서귀포시", fillStyle: C.teal, strokeStyle: C.teal },
+            ...(S.emd !== "all" ? [{ text: `선택: ${S.emd}`, fillStyle: C.amber, strokeStyle: C.amber }] : [])] } },
           tooltip: { callbacks: { label: (c) => `${fmt(c.raw)}명` } } },
           scales: { x: { title: axisTitle("방문객 수(명)"), ticks: { callback: (v) => fmt(v) } }, y: { title: axisTitle("읍면동"), ticks: { autoSkip: false, font: { size: 11 } } } } },
       });
@@ -408,7 +466,7 @@
       const t10 = pl.rows.slice(0, 10);
       drawChart("place", "c-place", {
         type: "bar",
-        data: { labels: t10.map((r) => r.n), datasets: [{ label: `${PM_LABEL[S.pmetric]}(건)`, data: t10.map((r) => r[S.pmetric]), backgroundColor: "#2463eb" }] },
+        data: { labels: t10.map((r) => r.n), datasets: [{ label: `${PM_LABEL[S.pmetric]}(건)`, data: t10.map((r) => r[S.pmetric]), backgroundColor: C.purple, borderRadius: 6 }] },
         options: { indexAxis: "y", plugins: { title: { display: true, text: `인기 장소 TOP 10 — ${PM_LABEL[S.pmetric]}` },
           tooltip: { callbacks: { afterLabel: (c) => `카테고리: ${t10[c.dataIndex].cat} · ${t10[c.dataIndex].emd}` } } },
           scales: { x: { title: axisTitle(`${PM_LABEL[S.pmetric]}(건)`), ticks: { callback: (v) => fmt(v) } }, y: { title: axisTitle("목적지명") } } },
@@ -438,7 +496,7 @@
       const t20 = sr.rows.slice(0, 20);
       drawChart("search", "c-search", {
         type: "bar",
-        data: { labels: t20.map((r) => r.n), datasets: [{ label: "비짓제주 수치 합계", data: t20.map((r) => r.v), backgroundColor: "#7c5cd6" }] },
+        data: { labels: t20.map((r) => r.n), datasets: [{ label: "비짓제주 수치 합계", data: t20.map((r) => r.v), backgroundColor: C.pink, borderRadius: 6 }] },
         options: { indexAxis: "y", plugins: { title: { display: true, text: "검색 수치 상위 20 (장소·행사명)" },
           tooltip: { callbacks: { afterLabel: (c) => `분류: ${t20[c.dataIndex].c}` } } },
           scales: { x: { title: axisTitle("수치 합계(원본 단위 미표기)"), ticks: { callback: (v) => fmt(v) } }, y: { title: axisTitle("장소·행사명"), ticks: { autoSkip: false, font: { size: 11 } } } } },
@@ -447,7 +505,7 @@
       if (HAS_WC) {
         cv.hidden = false; show("wc-fallback", "");
         const maxV = sr.rows[0].v, minV = sr.rows[sr.rows.length - 1].v;
-        const palette = { 관광지: "#2463eb", 음식점: "#e0832b", 숙박: "#16a37f", 쇼핑: "#d23c7a", "축제/행사": "#7c5cd6" };
+        const palette = { 관광지: C.purple, 음식점: C.amber, 숙박: C.teal, 쇼핑: C.pink, "축제/행사": C.blue };
         const byName = Object.fromEntries(sr.rows.map((r) => [r.n, r]));
         WordCloud(cv, {
           list: sr.rows.map((r) => [r.n, r.v]),
@@ -456,7 +514,7 @@
           color: (w) => palette[(byName[w] || {}).c] || "#555", backgroundColor: "#fff",
         });
         wcStat.total = sr.rows.length; wcStat.drawn = 0; wcStat.skipped = 0;
-        $("search-cats").textContent = "워드클라우드: 상위 60개 장소·행사명, 글자 크기 = 수치 합계(제곱근 비례), 색 = 분류(관광지 파랑·음식점 주황·숙박 초록·쇼핑 분홍·축제/행사 보라). 공간이 부족한 긴 이름은 생략될 수 있음(표에서 전체 확인). ";
+        $("search-cats").textContent = "워드클라우드: 상위 60개 장소·행사명, 글자 크기 = 수치 합계(제곱근 비례), 색 = 분류(관광지 보라·음식점 주황·숙박 청록·쇼핑 분홍·축제/행사 파랑). 공간이 부족한 긴 이름은 생략될 수 있음(표에서 전체 확인). ";
       } else {
         cv.hidden = true;
         show("wc-fallback", "워드클라우드 라이브러리를 불러오지 못했습니다(오프라인 등). 아래 키워드 빈도 막대그래프와 표로 대체합니다.");
@@ -473,8 +531,10 @@
       sr.months.length ? sr.rows.slice(0, 30) : []);
 
     const rv = renderReviews();
+    renderOverview(pl, sr, rv);
     renderSummary({ k, tr, rg, pl, sr, rv, ageLbl, regionLbl });
     window.DASH_RESULT = { state: { ...S }, kpi: k, trend: tr, region: rg, places: pl, search: sr, reviews: rv };
+    if (typeof syncPresets === "function") syncPresets();
   }
 
   // ---------- 지역별 방문 지도(Leaflet 히트맵) ----------
@@ -609,6 +669,79 @@
       { label: "언급 주제", get: (r) => Object.keys(r.codes).map((k) => names[k]).join(", ") }], rv.posts.slice().reverse());
     return rv;
   }
+
+  // ---------- 개요 카드 ----------
+  const ringCard = (t, color) => `<div class="ring-card" title="${esc(t.name)}: 분석 대상 ${t.total}건 중 ${t.n}건 언급">` +
+    `<div class="ring" style="--p:${(t.share || 0) * 100};--c:${color}"><b>${pct(t.share, 0)}</b></div><span>${esc(t.name)}</span><small>${t.n}건</small></div>`;
+  function topReviewTopics(rv, n) {
+    if (!rv || !rv.n) return [];
+    return rv.topics.filter((t) => (t.group === "activity" || t.group === "context") && t.n > 0)
+      .sort((a, b) => b.n - a.n).slice(0, n).map((t) => ({ ...t, total: rv.n }));
+  }
+  function renderOverview(pl, sr, rv) {
+    const list = (rows, val, extra) => {
+      if (!rows.length) return '<li class="na">선택 조건에 데이터가 없습니다.</li>';
+      const mx = val(rows[0]) || 1;
+      return rows.slice(0, 5).map((r) => `<li><span class="nm" title="${esc(r.n)}">${esc(r.n)}<small>${esc(extra(r))}</small></span>` +
+        `<span class="v">${fmt(val(r))}</span><div class="bar" style="width:${(val(r) / mx) * 100}%"></div></li>`).join("");
+    };
+    $("ov-places").innerHTML = list(pl.rows, (r) => r[S.pmetric], (r) => r.emd);
+    $("ov-search").innerHTML = list(sr.rows, (r) => r.v, (r) => r.c);
+    $("ov-search").classList.add("pink");
+    const colors = [C.purple, C.pink, C.teal, C.amber, C.blue, C.purple];
+    const t3 = topReviewTopics(rv, 3), t6 = topReviewTopics(rv, 6);
+    const none = '<p class="na">선택 조건에 해당하는 후기가 없습니다.</p>';
+    $("ov-review").innerHTML = t3.length ? t3.map((t, i) => ringCard(t, colors[i])).join("") : none;
+    $("r-rings").innerHTML = t6.length ? t6.map((t, i) => ringCard(t, colors[i])).join("") : "";
+  }
+
+  // ---------- 통합 검색: 장소·검색어·읍면동 ----------
+  function runSearch(q) {
+    const box = $("q-results");
+    q = q.trim();
+    if (!q) { box.hidden = true; return; }
+    const pm = D.places.months.map((m, j) => (inRange(m) ? j : -1)).filter((j) => j >= 0);
+    const vm = D.search.months.map((m, j) => (inRange(m) ? j : -1)).filter((j) => j >= 0);
+    const emds = D.region.emds.filter((e) => e.name.includes(q)).slice(0, 5);
+    const places = D.places.dests.map((d, i) => ({ d, v: sum(pm.map((j) => D.places[S.pmetric][i][j])) }))
+      .filter((x) => x.d.n.includes(q) && x.v > 0).sort((a, b) => b.v - a.v).slice(0, 6);
+    const items = D.search.items.map((it, i) => ({ it, v: sum(vm.map((j) => D.search.v[i][j])) }))
+      .filter((x) => x.it.n.includes(q) && x.v > 0).sort((a, b) => b.v - a.v).slice(0, 6);
+    const grp = (title, arr, f) => (arr.length ? `<h4>${title}</h4>` + arr.map(f).join("") : "");
+    box.innerHTML = grp("읍면동 — 누르면 지역 필터", emds, (e) => `<button type="button" data-kind="emd" data-v="${esc(e.name)}"><span>${esc(e.name)} <small>${esc(e.sgg)}</small></span><span class="v">지역 선택</span></button>`) +
+      grp(`인기 장소 — ${PM_LABEL[S.pmetric]}(선택 기간)`, places, (x) => `<button type="button" data-kind="place" data-v="${esc(x.d.n)}" data-emd="${esc(x.d.emd)}"><span>${esc(x.d.n)} <small>${esc(x.d.emd)}</small></span><span class="v">${fmt(x.v)}건</span></button>`) +
+      grp("검색 수치(선택 기간)", items, (x) => `<button type="button" data-kind="search" data-v="${esc(x.it.n)}" data-c="${esc(x.it.c)}"><span>${esc(x.it.n)} <small>${esc(x.it.c)}</small></span><span class="v">${fmt(x.v)}</span></button>`) ||
+      '<p class="empty">선택 기간에 일치하는 읍면동·장소·검색 항목이 없습니다. (장소·검색어는 사전 집계 후보 안에서만 찾습니다)</p>';
+    box.hidden = false;
+  }
+  function flashRow(tableId, name) {
+    const row = [...document.querySelectorAll(`#${tableId} tbody tr`)].find((tr) => [...tr.cells].some((td) => td.textContent === name));
+    if (!row) return false;
+    const det = row.closest("details"); if (det) det.open = true;
+    row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
+    row.scrollIntoView({ block: "center", behavior: "smooth" });
+    return true;
+  }
+  let qTimer = null;
+  $("q-search").addEventListener("input", (e) => { clearTimeout(qTimer); qTimer = setTimeout(() => runSearch(e.target.value), 150); });
+  $("q-search").addEventListener("focus", (e) => { if (e.target.value.trim()) runSearch(e.target.value); });
+  $("q-search").addEventListener("keydown", (e) => { if (e.key === "Escape") { $("q-results").hidden = true; e.target.blur(); } });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".search")) $("q-results").hidden = true; });
+  $("q-results").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-kind]");
+    if (!b) return;
+    $("q-results").hidden = true;
+    const kind = b.dataset.kind, v = b.dataset.v;
+    if (kind === "emd" || kind === "place") {
+      const em = D.region.emds.find((x) => x.name === (kind === "emd" ? v : b.dataset.emd));
+      if (em) { S.emd = em.name; S.sgg = em.sgg; syncControls(); render(); }
+      if (kind === "emd") document.getElementById("sec-region").scrollIntoView({ behavior: "smooth" });
+      else if (!flashRow("t-place", v)) document.getElementById("sec-places").scrollIntoView({ behavior: "smooth" });
+    } else {
+      S.scat = b.dataset.c; syncControls(); render();
+      if (!flashRow("t-search", v)) document.getElementById("sec-search").scrollIntoView({ behavior: "smooth" });
+    }
+  });
 
   // ---------- 분석 결과 요약 ----------
   function renderSummary({ k, tr, rg, pl, sr, rv, ageLbl, regionLbl }) {

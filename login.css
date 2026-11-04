@@ -1,0 +1,43 @@
+:root {
+  --ink: #211b3d; --muted: #6b6488; --line: #e6e1f5; --accent: #6d4fd8; --accent-soft: #efeafe;
+  --sb-1: #5b3fd0; --sb-2: #8a6cf2; --down: #d63c55; --up: #12996b;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; color: var(--ink);
+  background: radial-gradient(1200px 600px at 10% 0%, #e7defe, transparent), #f3f1fb;
+  font: 14px/1.55 "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; padding: 24px 16px; }
+.login-wrap { width: min(920px, 100%); display: grid; grid-template-columns: 1fr 1fr; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(76, 52, 170, .18); }
+.login-hero { background: linear-gradient(160deg, var(--sb-1), var(--sb-2)); color: #fff; padding: 40px 36px; display: flex; flex-direction: column; gap: 10px; }
+.login-hero .logo { width: 48px; height: 48px; border-radius: 50%; background: #fff; color: var(--sb-1); display: grid; place-items: center; font-weight: 800; font-size: 22px; }
+.login-hero h1 { margin: 10px 0 0; font-size: 26px; letter-spacing: 1px; }
+.login-hero p { margin: 0; opacity: .9; }
+.login-hero ul { margin: 18px 0 0; padding-left: 18px; opacity: .92; display: grid; gap: 6px; }
+.login-card { padding: 36px 34px; display: grid; gap: 14px; align-content: start; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--accent-soft); border-radius: 12px; padding: 4px; }
+.tabs button { border: 0; background: none; padding: 9px; border-radius: 9px; font: inherit; font-weight: 700; color: var(--muted); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(76,52,170,.15); }
+form { display: grid; gap: 12px; }
+label { display: grid; gap: 5px; font-weight: 600; font-size: 13px; }
+label small { font-weight: 400; color: var(--muted); }
+input { font: inherit; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfaff; color: var(--ink); }
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; background: #fff; }
+.primary { font: inherit; font-weight: 700; padding: 12px; border: 0; border-radius: 12px; color: #fff; cursor: pointer;
+  background: linear-gradient(90deg, var(--accent), var(--sb-2)); box-shadow: 0 6px 16px rgba(109,79,216,.35); }
+.primary:disabled { opacity: .6; cursor: wait; }
+.link { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
+.sub { margin: 0; text-align: center; color: var(--muted); font-size: 13px; }
+.msg { margin: 0; padding: 9px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 13px; }
+.err { margin: 0; padding: 9px 12px; border-radius: 10px; background: #fdecef; color: var(--down); font-size: 13px; }
+.caps { margin: -4px 0 0; color: #a2560c; font-size: 12px; }
+.meter { height: 6px; background: #ece8f8; border-radius: 3px; overflow: hidden; margin-top: -4px; }
+.meter span { display: block; height: 100%; width: 0; transition: width .2s, background .2s; }
+.rules { list-style: none; margin: -2px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 12px; color: var(--muted); }
+.rules li.ok { color: var(--up); font-weight: 600; }
+.note { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 12px; }
+@media (max-width: 760px) {
+  .login-wrap { grid-template-columns: 1fr; }
+  .login-hero { padding: 26px 24px; }
+  .login-hero ul { display: none; }
+  .login-card { padding: 26px 22px; }
+}

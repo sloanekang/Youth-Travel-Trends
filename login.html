@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>로그인 · 청년층 제주 관광 동향</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="login.css">
+<script src="auth.js"></script>
+</head>
+<body>
+<main class="login-wrap">
+  <section class="login-hero" aria-hidden="true">
+    <span class="logo">J</span>
+    <h1>JEJU YOUTH</h1>
+    <p>청년층은 제주에서 어떤 여행을 하고 있을까?</p>
+    <ul>
+      <li>20대 방문 추이와 전년 대비 증감</li>
+      <li>읍면동 방문 히트맵 · 인기 장소</li>
+      <li>비짓제주 검색 관심 · 블로그 후기</li>
+    </ul>
+  </section>
+
+  <section class="login-card">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-login" aria-selected="true" aria-controls="form-login">로그인</button>
+      <button type="button" role="tab" id="tab-signup" aria-selected="false" aria-controls="form-signup">회원가입</button>
+    </div>
+    <p class="msg" id="msg" role="status" hidden></p>
+
+    <form id="form-login" role="tabpanel" aria-labelledby="tab-login" novalidate>
+      <label>아이디<input id="li-id" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" required></label>
+      <label>비밀번호<input id="li-pw" name="password" type="password" autocomplete="current-password" maxlength="64" required></label>
+      <p class="caps" id="li-caps" hidden>Caps Lock이 켜져 있습니다.</p>
+      <p class="err" id="li-err" role="alert" hidden></p>
+      <button type="submit" class="primary" id="li-btn">로그인</button>
+      <p class="sub">계정이 없나요? <button type="button" class="link" data-go="signup">회원가입</button></p>
+    </form>
+
+    <form id="form-signup" role="tabpanel" aria-labelledby="tab-signup" novalidate hidden>
+      <label>아이디<input id="su-id" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" required>
+        <small>영문 소문자·숫자·밑줄(_) 4~20자</small></label>
+      <label>비밀번호<input id="su-pw" name="new-password" type="password" autocomplete="new-password" maxlength="64" required></label>
+      <div class="meter" aria-hidden="true"><span id="su-meter"></span></div>
+      <ul class="rules" id="su-rules"></ul>
+      <label>비밀번호 확인<input id="su-pw2" name="confirm-password" type="password" autocomplete="new-password" maxlength="64" required></label>
+      <p class="caps" id="su-caps" hidden>Caps Lock이 켜져 있습니다.</p>
+      <p class="err" id="su-err" role="alert" hidden></p>
+      <button type="submit" class="primary" id="su-btn">가입하기</button>
+      <p class="sub">이미 계정이 있나요? <button type="button" class="link" data-go="login">로그인</button></p>
+    </form>
+
+    <p class="note">비밀번호는 화면에 표시되지 않으며 저장하지 않습니다. 이 브라우저에는 복원할 수 없는 해시값만 남습니다. 60분 동안 사용하지 않거나 탭을 닫으면 자동으로 로그아웃됩니다.</p>
+  </section>
+</main>
+<script src="login.js"></script>
+</body>
+</html>
