@@ -60,7 +60,7 @@
         <option value="tot">전체(내국인+외국인)</option><option value="dom">내국인</option><option value="for">외국인</option></select></label>
       <button id="f-reset" type="button" class="btn-reset">필터 초기화</button>
     </div>
-    <p class="sb-note">파란 배지 = 그 패널에 적용된 필터 · 회색 = 데이터에 해당 정보 없음</p>
+    <p class="sb-note">필터마다 색이 정해져 있습니다. 패널 배지가 <b>진하게 칠해져 있으면</b> 그 필터가 지금 범위를 좁히고 있다는 뜻이고, 연한 배지는 적용되지만 '전체'로 선택된 상태, 회색은 데이터에 해당 정보가 없어 적용되지 않는 필터입니다.</p>
   </aside>
 
   <div id="mp-pop" class="mp-pop" role="dialog" aria-label="월 선택" hidden>
@@ -86,6 +86,7 @@
       <div class="user"><span class="avatar" aria-hidden="true">👤</span><span id="u-id"></span><button type="button" id="u-logout">로그아웃</button></div>
     </header>
 
+    <div class="fchips" id="fchips" aria-label="적용 중인 필터"></div>
     <p id="lib-warn" class="notice" hidden></p>
     <p id="period-warn" class="notice" hidden></p>
 

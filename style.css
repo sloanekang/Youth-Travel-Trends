@@ -148,8 +148,14 @@ button { cursor: pointer; }
 .inline-filter { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
 .notice { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 8px 10px; font-size: 13px; margin: 0; }
 .badges { display: inline-flex; gap: 4px; flex-wrap: wrap; font-weight: 400; }
-.badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
-.badge.off { background: #f1f0f5; color: var(--off); }
+/* 필터 배지: --fc = 필터 종류 색. on = 범위를 좁히는 중(진하게), idle = 적용되나 '전체', off = 데이터에 정보 없음 */
+.badge { --fc: var(--accent); font-size: 11px; padding: 1px 8px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px;
+  background: color-mix(in srgb, var(--fc) 12%, #fff); color: var(--fc); border: 1px solid color-mix(in srgb, var(--fc) 32%, #fff); }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--fc); }
+.badge.on { background: var(--fc); color: #fff; border-color: var(--fc); font-weight: 600; }
+.badge.on::before { background: #fff; }
+.badge.off { background: #f3f2f7; color: var(--off); border-color: transparent; }
+.badge.off::before { background: #cbc7da; }
 details { margin-top: 10px; }
 summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; }
 .tbl-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; margin-top: 6px; border-radius: 10px; }
@@ -221,3 +227,28 @@ tr.flash td { animation: flash 1.6s ease-out; }
 .user { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
 .user .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 15px; }
 .user button { border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--accent); background: #fff; }
+
+/* 적용 중인 필터 칩 */
+.fchips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fchips .ttl { font-size: 12.5px; color: var(--muted); font-weight: 600; margin-right: 2px; }
+.fchip { --fc: var(--accent); display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; font-size: 12.5px; padding: 4px 6px 4px 10px;
+  background: #fff; border: 1px solid color-mix(in srgb, var(--fc) 35%, #fff); color: var(--ink); box-shadow: var(--shadow); }
+.fchip > button.go { border: 0; background: none; padding: 0; font: inherit; color: inherit; display: inline-flex; gap: 6px; align-items: center; }
+.fchip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--fc); }
+.fchip .k { color: var(--fc); font-weight: 700; }
+.fchip.on { background: color-mix(in srgb, var(--fc) 12%, #fff); border-color: var(--fc); }
+.fchip.idle { opacity: .7; }
+.fchip .x { border: 0; background: color-mix(in srgb, var(--fc) 18%, #fff); color: var(--fc); width: 20px; height: 20px; padding: 0; border-radius: 50%; font-size: 13px; line-height: 1; display: grid; place-items: center; }
+.fchip .x:hover { background: var(--fc); color: #fff; }
+/* 사이드바·패널 필터 컨트롤의 색 표시 */
+.fk .lbl::before, .inline-filter.fk::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--fc); margin-right: 6px; vertical-align: 1px; box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
+.fk.narrow select, .fk.narrow .mp-btn { border-color: var(--fc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--fc) 45%, transparent); }
+.sb-field.fk.narrow .lbl { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--fc) 70%, #fff); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+/* 도넛 설명 툴팁 */
+[data-tip] { cursor: help; }
+[data-tip]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
+.tip { position: fixed; z-index: 4000; max-width: 320px; background: #211b3d; color: #fff; padding: 9px 11px; border-radius: 10px; font-size: 12.5px; line-height: 1.55;
+  pointer-events: none; box-shadow: 0 8px 24px rgba(20,10,60,.3); }
+.tip b { color: #ffd84d; }
+.tip small { opacity: .75; }
+.tip hr { border: 0; border-top: 1px solid rgba(255,255,255,.2); margin: 5px 0; }

@@ -37,8 +37,21 @@
       cols.map((c) => `<td class="${c.num ? "num" : ""}">${c.html ? c.html(r, i) : esc(c.get(r, i))}</td>`).join("") + "</tr>").join("");
     return `<div class="tbl-wrap"><table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>`;
   }
+  // 필터 종류별 색(사이드바·칩·패널 배지 공통)
+  const FKEY = {
+    period: { label: "기간", color: "#6d4fd8" }, age: { label: "연령", color: "#d6336c" }, sex: { label: "성별", color: "#e8590c" },
+    region: { label: "지역", color: "#0f9d94" }, visitor: { label: "내·외국인", color: "#2f6fe0" },
+    pmetric: { label: "장소 기준", color: "#5f6b85" }, scat: { label: "검색 분류", color: "#5f6b85" },
+  };
   function badges(id, list) {
-    $(id).innerHTML = list.map(([t, on]) => `<span class="badge ${on ? "" : "off"}">${esc(t)}</span>`).join("");
+    const el = $(id);
+    el.innerHTML = list.map(([t, on, key]) => {
+      const f = FKEY[key];
+      if (!f) return `<span class="badge ${on ? "" : "off"}">${esc(t)}</span>`;
+      const cls = !on ? "off" : narrowing(key) ? "on" : "idle";
+      const tip = !on ? `${f.label}: 이 패널의 데이터에는 해당 정보가 없어 적용되지 않음` : `${f.label}: ${fValue(key)}${cls === "on" ? " (적용 중)" : " (전체)"}`;
+      return `<span class="badge ${cls}" style="--fc:${f.color}" title="${esc(tip)}">${esc(t)}</span>`;
+    }).join("");
   }
   function show(id, msg) { const el = $(id); el.hidden = !msg; if (msg) el.innerHTML = msg; }
   function drawChart(key, canvasId, cfg) {
@@ -237,7 +250,8 @@
     return years.map((y) => {
       const ms = Array.from({ length: 12 }, (_, i) => y * 100 + i + 1);
       const tot = sum(ms.map((m) => ageValue(m, S.age, S.sex))), all = sum(ms.map((m) => ageValue(m, "all", S.sex)));
-      return { y, share: (ageValue(y * 100 + 7, S.age, S.sex) + ageValue(y * 100 + 8, S.age, S.sex)) / tot,
+      const jul = ageValue(y * 100 + 7, S.age, S.sex), aug = ageValue(y * 100 + 8, S.age, S.sex);
+      return { y, jul, aug, tot, share: (jul + aug) / tot,
         allShare: (ageValue(y * 100 + 7, "all", S.sex) + ageValue(y * 100 + 8, "all", S.sex)) / all };
     });
   }
@@ -371,12 +385,22 @@
       }
       if (k.share != null) {
         $("k-share").textContent = pct(k.share); ring("k-share-ring", k.share, C.purple);
-        $("k-share-sub").textContent = `${SEX_LABEL[S.sex]} 전체 연령(${fmt(k.allAges)}명) 중 ${AGE_LABEL(S.age)} 비중`;
+        $("k-share-sub").textContent = `전체 연령(${SEX_LABEL[S.sex]}) ${fmt(k.allAges)}명 중 ${AGE_LABEL(S.age)} 비중`;
       } else {
         $("k-share").innerHTML = '<span class="na-v">-</span>'; ring("k-share-ring", null);
         $("k-share-sub").textContent = "연령대를 선택하면 계산됩니다.";
       }
     }
+    const period = `${ymLabel(S.start)} ~ ${ymLabel(S.end)}`;
+    setTip("k-share-ring", k.share != null
+      ? `<b>전체 연령 중 ${esc(AGE_LABEL(S.age))} 비중 ${pct(k.share, 2)}</b><br>${esc(AGE_LABEL(S.age))} 방문객 ${fmt(k.value)}명<br>÷ 전체 연령(${esc(SEX_LABEL[S.sex])}) ${fmt(k.allAges)}명` +
+        `<hr><small>${esc(period)} · ${k.months.length}개월 합계 · 연령대별 방문 데이터(지역 구분 없음)</small>`
+      : `<b>전체 연령 중 비중</b><br>${k.months.length ? "연령대를 '전체'가 아닌 값으로 고르면 계산됩니다." : "선택 기간에 연령대별 방문 데이터가 없습니다."}`);
+    setTip("k-summer-ring", k.summer.length
+      ? `<b>여름(7~8월) 집중도</b> — ${esc(ageLbl)}<br>` + k.summer.map((x) =>
+          `${x.y}년: (7월 ${fmt(x.jul)} + 8월 ${fmt(x.aug)}) ÷ 연간 ${fmt(x.tot)}명 = <b>${pct(x.share, 2)}</b><br><small>같은 해 전체 연령 ${pct(x.allShare, 2)}</small>`).join("<br>") +
+        `<hr><small>1~12월이 모두 선택된 연도만 계산 · 큰 숫자는 가장 최근 연도</small>`
+      : `<b>여름(7~8월) 집중도</b><br>1~12월이 모두 포함된 연도를 기간으로 고르면 계산됩니다(예: 2024년, 2025년).`);
     const regLine = (id, html) => { $(id).hidden = !html; $(id).innerHTML = html || ""; };
     if (k.reg) {
       const rl = `<b>선택 지역 ${esc(regionLabel())}</b> · ${esc(VIS_LABEL[S.visitor])} · 연령 구분 없음`;
@@ -401,7 +425,7 @@
           scales: { x: { title: axisTitle("월") }, y: { title: axisTitle(`방문객 수(${unit})`), ticks: { callback: (v) => fmt(v) } } } } };
     };
     const tr = calcTrend();
-    badges("b-trend", [["기간", 1], ["연령대·성별(위)", 1], ["지역·내외국인(아래)", 1]]);
+    badges("b-trend", [["기간", 1, "period"], ["연령대(위)", 1, "age"], ["성별(위)", 1, "sex"], ["지역(아래)", 1, "region"], ["내·외국인(아래)", 1, "visitor"]]);
     $("trend-desc").textContent = `위: 월별 ${ageLbl} 방문객 수(연령대별 방문 데이터, 지역 구분 없음) · 아래: ${regionLabel()} 읍면동 방문객 수(연령 구분 없음, ${VIS_LABEL[S.visitor]}). 두 데이터는 집계 기준이 달라 서로 비교하지 않음. 연도별로 선을 나눠 같은 월끼리 비교.`;
     if (!tr.length) { drawChart("trend", "c-trend", null); show("trend-empty", "선택 기간에 데이터가 없습니다."); }
     else {
@@ -422,7 +446,7 @@
 
     // 지역별
     const rg = calcRegion();
-    badges("b-region", [["기간", 1], ["시군구", 1], ["읍면동(강조)", 1], ["내·외국인", 1], ["연령", 0]]);
+    badges("b-region", [["기간", 1, "period"], ["시군구·읍면동", 1, "region"], ["내·외국인", 1, "visitor"], ["연령", 0, "age"]]);
     if (!rg.months.length) {
       drawChart("region", "c-region", null); show("region-empty", "선택 기간에 읍면동 방문객 데이터가 없습니다.");
       $("region-top5").innerHTML = "";
@@ -457,7 +481,7 @@
 
     // 인기 장소
     const pl = calcPlaces();
-    badges("b-place", [["기간", 1], ["시군구·읍면동", 1], ["집계 기준", 1], ["연령", 0]]);
+    badges("b-place", [["기간", 1, "period"], ["시군구·읍면동", 1, "region"], ["집계 기준", 1, "pmetric"], ["연령", 0, "age"]]);
     $("place-desc").textContent = `${regionLbl} 목적지별 ${PM_LABEL[S.pmetric]} 합계 (단위: 건, 내비게이션 도착 기준) · 유형은 원본 '카테고리 3단계' · 연령 구분 없음`;
     if (!pl.months.length || !pl.rows.length) {
       drawChart("place", "c-place", null); show("place-empty", "선택 조건에 해당하는 장소 데이터가 없습니다."); $("place-exact").textContent = "";
@@ -483,7 +507,7 @@
 
     // 검색어
     const sr = calcSearch();
-    badges("b-search", [["기간", 1], ["검색 분류", 1], ["지역(주소 기준)", 1], ["연령", 0]]);
+    badges("b-search", [["기간", 1, "period"], ["검색 분류", 1, "scat"], ["지역(주소 기준)", 1, "region"], ["연령", 0, "age"]]);
     const RM = D.search.regionMatch;
     $("search-scope").textContent = (sr.key === "all" ? "지역: 전체" : `지역: ${sr.key} — 주소로 판별한 항목만 집계`) +
       (sr.fallback ? ` · ${S.emd}은(는) 동 지역이라 도로명 주소로 판별할 수 없어 ${sr.key} 기준으로 표시` : "") +
@@ -535,6 +559,7 @@
     renderSummary({ k, tr, rg, pl, sr, rv, ageLbl, regionLbl });
     window.DASH_RESULT = { state: { ...S }, kpi: k, trend: tr, region: rg, places: pl, search: sr, reviews: rv };
     if (typeof syncPresets === "function") syncPresets();
+    renderFilterChips();
   }
 
   // ---------- 지역별 방문 지도(Leaflet 히트맵) ----------
@@ -643,7 +668,7 @@
       return null;
     }
     const rv = calcReviews();
-    badges("b-review", [["기간(작성일)", !S.rall], ["연령(20대 글만)", 1], ["지역(지명 언급)", 1], ["성별", 0]]);
+    badges("b-review", [["기간(작성일)", !S.rall, "period"], ["연령(20대 글만)", 1, "age"], ["지역(지명 언급)", 1, "region"], ["성별", 0, "sex"]]);
     $("review-desc").innerHTML = `네이버 블로그 검색 API(${esc(R.collected_at)} 수집) · 검색어 ${R.queries.map((q) => `'${esc(q)}'`).join(", ")} · ` +
       `분석 대상: 제목에 20대·제주가 있고 20대 본인·일행 여행 후기로 분류된 글 <b>${rv.n}건</b>` +
       (rv.n ? ` (작성일 ${ymLabel(Math.floor(Number(rv.posts[0].date) / 100))} ~ ${ymLabel(Math.floor(Number(rv.posts[rv.n - 1].date) / 100))})` : "");
@@ -671,8 +696,12 @@
   }
 
   // ---------- 개요 카드 ----------
-  const ringCard = (t, color) => `<div class="ring-card" title="${esc(t.name)}: 분석 대상 ${t.total}건 중 ${t.n}건 언급">` +
-    `<div class="ring" style="--p:${(t.share || 0) * 100};--c:${color}"><b>${pct(t.share, 0)}</b></div><span>${esc(t.name)}</span><small>${t.n}건</small></div>`;
+  const ringCard = (t, color) => {
+    const tip = `<b>${esc(t.name)} ${pct(t.share, 1)}</b><br>20대 여행 후기 ${t.total}건 중 ${t.n}건이 언급<br>` +
+      `<small>${{ activity: "주요 활동", context: "여행 형태·계기·이동" }[t.group] || ""} · 제목·요약문 키워드 규칙 기준(감성 분석 아님)<br>현재 기간·지역 필터가 적용된 글 기준</small>`;
+    return `<div class="ring-card"><div class="ring" style="--p:${(t.share || 0) * 100};--c:${color}" data-tip="${esc(tip)}" tabindex="0" role="img" aria-label="${esc(t.name)} ${pct(t.share, 1)}, ${t.total}건 중 ${t.n}건"><b>${pct(t.share, 0)}</b></div>` +
+      `<span>${esc(t.name)}</span><small>${t.n}건</small></div>`;
+  };
   function topReviewTopics(rv, n) {
     if (!rv || !rv.n) return [];
     return rv.topics.filter((t) => (t.group === "activity" || t.group === "context") && t.n > 0)
@@ -694,6 +723,64 @@
     $("ov-review").innerHTML = t3.length ? t3.map((t, i) => ringCard(t, colors[i])).join("") : none;
     $("r-rings").innerHTML = t6.length ? t6.map((t, i) => ringCard(t, colors[i])).join("") : "";
   }
+
+  // ---------- 도넛 툴팁 ----------
+  const tipEl = document.createElement("div");
+  tipEl.className = "tip"; tipEl.setAttribute("role", "tooltip"); tipEl.hidden = true;
+  document.body.appendChild(tipEl);
+  function setTip(id, html) {
+    const el = $(id);
+    el.dataset.tip = html; el.tabIndex = 0; el.setAttribute("role", "img");
+    el.setAttribute("aria-label", html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+  }
+  function placeTip(x, y) {
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    tipEl.style.left = Math.max(8, Math.min(x + 14, window.innerWidth - w - 8)) + "px";
+    tipEl.style.top = (y + 16 + h > window.innerHeight ? y - h - 12 : y + 16) + "px";
+  }
+  const showTip = (el, x, y) => { tipEl.innerHTML = el.dataset.tip; tipEl.hidden = false; placeTip(x, y); };
+  document.addEventListener("mouseover", (e) => { const el = e.target.closest("[data-tip]"); if (el) showTip(el, e.clientX, e.clientY); });
+  document.addEventListener("mousemove", (e) => { if (!tipEl.hidden && e.target.closest("[data-tip]")) placeTip(e.clientX, e.clientY); });
+  document.addEventListener("mouseout", (e) => { const el = e.target.closest("[data-tip]"); if (el && !el.contains(e.relatedTarget)) tipEl.hidden = true; });
+  document.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); if (el) { const r = el.getBoundingClientRect(); showTip(el, r.left, r.bottom - 8); } });
+  document.addEventListener("focusout", (e) => { if (e.target.closest("[data-tip]")) tipEl.hidden = true; });
+  window.addEventListener("scroll", () => { tipEl.hidden = true; }, { passive: true });
+
+  // ---------- 필터 색 표시: 칩·사이드바 ----------
+  function narrowing(key) {
+    return { period: !(S.start === allMonths[0] && S.end === allMonths[allMonths.length - 1]), age: S.age !== "all", sex: S.sex !== "all",
+      region: regionOn(), visitor: S.visitor !== "tot", pmetric: true, scat: S.scat !== "all" }[key];
+  }
+  function fValue(key) {
+    return { period: `${ymLabel(S.start)} ~ ${ymLabel(S.end)}`, age: AGE_LABEL(S.age), sex: SEX_LABEL[S.sex], region: regionLabel(),
+      visitor: VIS_LABEL[S.visitor], pmetric: PM_LABEL[S.pmetric], scat: S.scat === "all" ? "전체 분류" : S.scat }[key];
+  }
+  const CTRL_KEY = { "f-start": "period", "f-end": "period", "f-age": "age", "f-sex": "sex", "f-sgg": "region", "f-emd": "region",
+    "f-visitor": "visitor", "f-pmetric": "pmetric", "f-scat": "scat" };
+  const ctrlBox = (id) => $(id).closest(".sb-field, .inline-filter");
+  Object.entries(CTRL_KEY).forEach(([id, key]) => { const b = ctrlBox(id); b.classList.add("fk"); b.style.setProperty("--fc", FKEY[key].color); });
+  const CLEAR = { period: () => { S.start = allMonths[0]; S.end = allMonths[allMonths.length - 1]; }, age: () => { S.age = "all"; }, sex: () => { S.sex = "all"; },
+    region: () => { S.sgg = "all"; S.emd = "all"; }, visitor: () => { S.visitor = "tot"; }, scat: () => { S.scat = "all"; } };
+  const FOCUS = { period: "f-start", age: "f-age", sex: "f-sex", region: "f-sgg", visitor: "f-visitor", pmetric: "f-pmetric", scat: "f-scat" };
+  function renderFilterChips() {
+    const keys = ["period", "age", "sex", "region", "visitor", "pmetric", "scat"];
+    $("fchips").innerHTML = '<span class="ttl">적용 중인 필터</span>' + keys.map((k) => {
+      const on = narrowing(k), f = FKEY[k];
+      return `<span class="fchip ${on ? "on" : "idle"}" style="--fc:${f.color}"><button type="button" class="go" data-key="${k}" title="${esc(f.label)} 필터로 이동">` +
+        `<span class="dot"></span><span class="k">${esc(f.label)}</span>${esc(fValue(k))}</button>` +
+        (on && CLEAR[k] ? `<button type="button" class="x" data-clear="${k}" aria-label="${esc(f.label)} 필터 해제" title="해제">×</button>` : "") + "</span>";
+    }).join("");
+    Object.entries(CTRL_KEY).forEach(([id, key]) => ctrlBox(id).classList.toggle("narrow", key !== "pmetric" && narrowing(key)));
+  }
+  $("fchips").addEventListener("click", (e) => {
+    const x = e.target.closest("[data-clear]"), go = e.target.closest("[data-key]");
+    if (x) { CLEAR[x.dataset.clear](); syncControls(); render(); return; }
+    if (go) {
+      const el = $(FOCUS[go.dataset.key]);
+      if (el.closest(".sidebar") && window.innerWidth <= 900) setSidebar(true);
+      el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus({ preventScroll: true });
+    }
+  });
 
   // ---------- 통합 검색: 장소·검색어·읍면동 ----------
   function runSearch(q) {
