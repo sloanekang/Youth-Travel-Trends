@@ -4,10 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>청년층 제주 관광 동향</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
 <script src="data.js"></script>
 </head>
@@ -21,7 +23,7 @@
     <dl class="meta">
       <div><dt>분석 기간</dt><dd id="hdr-period">-</dd></div>
       <div><dt>데이터 출처</dt><dd>제주 관광 데이터 파일 7종(와이어프레임 표기: 제주 AI 관광데이터허브), 비짓제주 · 온라인 후기: 네이버 블로그 검색 API(제목·요약문)</dd></div>
-      <div><dt>분석 대상</dt><dd>연령 필터는 연령대별 방문 데이터에만 적용 · 지역·장소·검색 데이터는 연령 정보가 없어 <b>전체 관광객</b> 기준</dd></div>
+      <div><dt>분석 대상</dt><dd>필터는 데이터에 해당 정보가 있는 패널에만 적용(패널 제목 옆 배지: 파랑=적용, 회색=데이터에 정보 없음) · 지역·장소·검색 데이터는 연령 정보가 없어 <b>전체 관광객</b> 기준</dd></div>
     </dl>
     <p id="lib-warn" class="notice" hidden></p>
   </section>
@@ -30,14 +32,14 @@
   <section class="card">
     <h2>필터</h2>
     <div class="filters">
-      <label>시작 월<select id="f-start"></select></label>
-      <label>종료 월<select id="f-end"></select></label>
-      <label>연령대 <small>(방문 규모·추이)</small><select id="f-age"></select></label>
+      <div class="mp-field"><span class="lbl">시작 월</span><button type="button" class="mp-btn" id="f-start" aria-haspopup="dialog"></button></div>
+      <div class="mp-field"><span class="lbl">종료 월</span><button type="button" class="mp-btn" id="f-end" aria-haspopup="dialog"></button></div>
+      <label>연령대 <small>(방문 규모·추이·후기)</small><select id="f-age"></select></label>
       <label>성별 <small>(방문 규모·추이)</small><select id="f-sex">
         <option value="all">전체</option><option value="M">남성(M)</option><option value="W">여성(W)</option></select></label>
-      <label>시군구 <small>(지역별 방문·인기 장소)</small><select id="f-sgg"></select></label>
-      <label>읍면동 <small>(지역별 방문·인기 장소)</small><select id="f-emd"></select></label>
-      <label>내·외국인 <small>(지역별 방문)</small><select id="f-visitor">
+      <label>시군구 <small>(방문 규모·추이·지역·장소·검색어·후기)</small><select id="f-sgg"></select></label>
+      <label>읍면동 <small>(〃, 검색어·후기는 읍·면만)</small><select id="f-emd"></select></label>
+      <label>내·외국인 <small>(입도객·추이·지역별 방문)</small><select id="f-visitor">
         <option value="tot">전체(내국인+외국인)</option><option value="dom">내국인</option><option value="for">외국인</option></select></label>
       <label>장소 집계 기준 <small>(인기 장소)</small><select id="f-pmetric">
         <option value="tour">관광객 도착 수</option><option value="res">도민 도착 수</option><option value="all">도착건수(전체)</option></select></label>
@@ -45,16 +47,21 @@
       <button id="f-reset" type="button">초기화</button>
     </div>
     <p id="period-warn" class="notice" hidden></p>
+    <div id="mp-pop" class="mp-pop" role="dialog" aria-label="월 선택" hidden>
+      <div class="mp-head"><button type="button" id="mp-prev" aria-label="이전 연도">◀</button><b id="mp-year"></b><button type="button" id="mp-next" aria-label="다음 연도">▶</button></div>
+      <div class="mp-grid" id="mp-grid"></div>
+      <div class="mp-foot" id="mp-foot"></div>
+    </div>
   </section>
 
   <!-- 핵심 지표 -->
   <section class="kpis">
     <div class="card kpi"><h2>방문 규모</h2>
-      <div class="big" id="k-visit">-</div><p class="sub" id="k-visit-sub"></p></div>
+      <div class="big" id="k-visit">-</div><p class="sub" id="k-visit-sub"></p><p class="sub reg" id="k-visit-reg" hidden></p></div>
     <div class="card kpi"><h2>전년 동월 대비 증감률</h2>
-      <div class="big" id="k-yoy">-</div><p class="sub" id="k-yoy-sub"></p></div>
+      <div class="big" id="k-yoy">-</div><p class="sub" id="k-yoy-sub"></p><p class="sub reg" id="k-yoy-reg" hidden></p></div>
     <div class="card kpi"><h2>전체 연령 중 비중</h2>
-      <div class="big" id="k-share">-</div><p class="sub" id="k-share-sub"></p></div>
+      <div class="big" id="k-share">-</div><p class="sub" id="k-share-sub"></p><p class="sub reg" id="k-share-reg" hidden></p></div>
     <div class="card kpi"><h2>참고: 입도 관광객 수</h2>
       <div class="big" id="k-inb">-</div><p class="sub" id="k-inb-sub"></p></div>
   </section>
@@ -63,9 +70,11 @@
   <section class="card">
     <h2>방문 추이 <span class="badges" id="b-trend"></span></h2>
     <p class="desc" id="trend-desc"></p>
-    <div class="chart-box h300"><canvas id="c-trend"></canvas></div>
-    <p class="notice" id="trend-empty" hidden></p>
-    <details><summary>상세 표</summary><div id="t-trend"></div></details>
+    <div class="pair">
+      <div><div class="chart-box h300"><canvas id="c-trend"></canvas></div><p class="notice" id="trend-empty" hidden></p></div>
+      <div><div class="chart-box h300"><canvas id="c-trend-reg"></canvas></div><p class="notice" id="trend-reg-empty" hidden></p></div>
+    </div>
+    <details><summary>상세 표</summary><div id="t-trend"></div><div id="t-trend-reg"></div></details>
   </section>
 
   <!-- 지역별 방문 -->
@@ -100,6 +109,7 @@
     <section class="card">
       <h2>관광 검색어 <span class="badges" id="b-search"></span></h2>
       <p class="desc">비짓제주 <b>장소·행사명별 수치 합계</b>(키워드 단위 아님). 검색 수치는 관심의 지표일 뿐 실제 방문·선호를 의미하지 않음. 연령 구분 없음.</p>
+      <p class="fine" id="search-scope"></p>
       <div class="wc-box"><canvas id="c-wc" width="760" height="340"></canvas><p class="notice" id="wc-fallback" hidden></p><p class="fine" id="wc-status"></p></div>
       <div class="chart-box h420"><canvas id="c-search"></canvas></div>
       <p class="notice" id="search-empty" hidden></p>
@@ -112,7 +122,7 @@
     <section class="card">
       <h2>온라인 후기 <span class="badges" id="b-review"></span></h2>
       <p class="desc" id="review-desc"></p>
-      <label class="chk"><input type="checkbox" id="f-rperiod"> 대시보드 기간 필터 적용(블로그 작성일 기준)</label>
+      <label class="chk"><input type="checkbox" id="f-rall"> 기간 필터 무시하고 전체 수집 기간(2012~2026) 보기</label>
       <p class="notice" id="review-empty" hidden></p>
       <div class="rev">
         <div><h3>주요 활동</h3><ul class="tl" id="r-activity"></ul></div>

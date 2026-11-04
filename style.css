@@ -78,3 +78,26 @@ tr.hl td { background: #fff8d6; }
 .top5 { margin-top: 12px; }
 .top5 ol { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; padding-left: 18px; }
 @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } .top5 ol { grid-template-columns: 1fr; } }
+
+/* 월 달력 선택 */
+.mp-field { display: grid; gap: 4px; font-weight: 600; font-size: 13px; position: relative; }
+.mp-btn { background: #fff; color: var(--ink); border: 1px solid var(--line); text-align: left; display: flex; justify-content: space-between; align-items: center; }
+.mp-btn::after { content: "📅"; font-size: 13px; }
+.mp-btn[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px #2463eb33; }
+.mp-pop { position: absolute; z-index: 1000; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.15); padding: 10px; width: 260px; }
+.mp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.mp-head button { background: #f3f6fb; color: var(--ink); border-color: var(--line); padding: 3px 10px; }
+.mp-head button:disabled { opacity: .35; cursor: default; }
+.mp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.mp-grid button { background: #fff; color: var(--ink); border: 1px solid var(--line); padding: 7px 0; font-size: 13px; }
+.mp-grid button:hover:not(:disabled) { border-color: var(--accent); }
+.mp-grid button.in { background: #e8f0ff; border-color: #c9dbff; }
+.mp-grid button.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+.mp-grid button:disabled { color: #b8bfcc; background: #f7f7f9; cursor: not-allowed; }
+.mp-foot { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.mp-foot button { background: #f3f6fb; color: var(--accent); border-color: var(--line); font-size: 12px; padding: 3px 8px; }
+.kpi .reg { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; color: var(--ink); }
+.heat-legend { width: 150px; height: 10px; border-radius: 5px; margin: 4px 0 2px; }
+.heat-legend-lbl { display: flex; justify-content: space-between; font-size: 11px; color: #555; }
+/* 히트맵 캔버스는 표시만 하고 마우스 이벤트는 아래 읍면동 경계(툴팁·클릭)로 통과 */
+.leaflet-heatmap-layer { pointer-events: none !important; }

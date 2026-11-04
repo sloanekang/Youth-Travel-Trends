@@ -52,12 +52,10 @@
   const allMonths = [...new Set([].concat(D.age.months, D.inbound.months, D.region.months, D.places.months, D.search.months))].sort();
   const ages = [...new Set(D.age.rows.map((r) => r[2]))].sort((a, b) => a - b);
   const sggs = [...new Set(D.region.emds.map((e) => e.sgg))];
-  const DEFAULT = { start: 202501, end: 202512, age: 20, sex: "all", sgg: "all", emd: "all", visitor: "tot", pmetric: "tour", scat: "all", rperiod: false };
+  const DEFAULT = { start: 202501, end: 202512, age: 20, sex: "all", sgg: "all", emd: "all", visitor: "tot", pmetric: "tour", scat: "all", rall: false };
   const S = Object.assign({}, DEFAULT);
 
   const opt = (v, t) => `<option value="${esc(v)}">${esc(t)}</option>`;
-  $("f-start").innerHTML = allMonths.map((m) => opt(m, ymLabel(m))).join("");
-  $("f-end").innerHTML = allMonths.map((m) => opt(m, ymLabel(m))).join("");
   $("f-age").innerHTML = opt("all", "전체 연령") + ages.map((a) => opt(a, AGE_LABEL(a))).join("");
   $("f-sgg").innerHTML = opt("all", "전체 지역") + sggs.map((s) => opt(s, s)).join("");
   $("f-scat").innerHTML = opt("all", "전체 분류") + D.search.cats.map((c) => opt(c, c)).join("");
@@ -68,10 +66,10 @@
     $("f-emd").value = S.emd;
   }
   function syncControls() {
-    $("f-start").value = S.start; $("f-end").value = S.end; $("f-age").value = S.age;
+    $("f-start").textContent = ymLabel(S.start); $("f-end").textContent = ymLabel(S.end); $("f-age").value = S.age;
     $("f-sex").value = S.sex; $("f-sgg").value = S.sgg; fillEmd();
     $("f-visitor").value = S.visitor; $("f-pmetric").value = S.pmetric; $("f-scat").value = S.scat;
-    $("f-rperiod").checked = S.rperiod;
+    $("f-rall").checked = S.rall;
   }
   const bind = (id, key, num) => $(id).addEventListener("change", (e) => {
     const v = e.target.value; S[key] = num && v !== "all" ? Number(v) : v;
@@ -79,13 +77,72 @@
     if (key === "emd" && S.emd !== "all") S.sgg = D.region.emds.find((x) => x.name === S.emd).sgg, $("f-sgg").value = S.sgg;
     render();
   });
-  bind("f-start", "start", true); bind("f-end", "end", true); bind("f-age", "age", true); bind("f-sex", "sex");
+  bind("f-age", "age", true); bind("f-sex", "sex");
   bind("f-sgg", "sgg"); bind("f-emd", "emd"); bind("f-visitor", "visitor"); bind("f-pmetric", "pmetric"); bind("f-scat", "scat");
-  $("f-rperiod").addEventListener("change", (e) => { S.rperiod = e.target.checked; render(); });
+  $("f-rall").addEventListener("change", (e) => { S.rall = e.target.checked; render(); });
+
+  // 월 달력: 연도를 넘기며 월을 고른다. 데이터가 없는 월은 비활성
+  const YEARS = [...new Set(allMonths.map((m) => Math.floor(m / 100)))];
+  const mp = { target: null, year: null };
+  const pop = $("mp-pop");
+  pop.parentElement.style.position = "relative";
+  function openPicker(which) {
+    if (mp.target === which && !pop.hidden) return closePicker();
+    mp.target = which; mp.year = Math.floor(S[which] / 100);
+    const btn = $(`f-${which}`), host = pop.parentElement.getBoundingClientRect(), b = btn.getBoundingClientRect();
+    pop.style.left = Math.max(0, Math.min(b.left - host.left, host.width - 270)) + "px";
+    pop.style.top = b.bottom - host.top + 4 + "px";
+    ["start", "end"].forEach((w) => $(`f-${w}`).setAttribute("aria-expanded", String(w === which)));
+    pop.hidden = false; renderPicker();
+  }
+  function closePicker() {
+    pop.hidden = true; mp.target = null;
+    ["start", "end"].forEach((w) => $(`f-${w}`).setAttribute("aria-expanded", "false"));
+  }
+  function renderPicker() {
+    $("mp-year").textContent = `${mp.year}년 · ${mp.target === "start" ? "시작 월" : "종료 월"}`;
+    $("mp-prev").disabled = mp.year <= YEARS[0]; $("mp-next").disabled = mp.year >= YEARS[YEARS.length - 1];
+    $("mp-grid").innerHTML = Array.from({ length: 12 }, (_, i) => {
+      const ym = mp.year * 100 + i + 1, has = allMonths.includes(ym);
+      const cls = ym === S[mp.target] ? "sel" : ym >= S.start && ym <= S.end ? "in" : "";
+      return `<button type="button" data-ym="${ym}" class="${cls}" ${has ? "" : 'disabled title="데이터 없음"'}>${i + 1}월</button>`;
+    }).join("");
+    const last = allMonths[allMonths.length - 1];
+    const presets = YEARS.map((y) => [`${y}년`, Math.max(y * 100 + 1, allMonths[0]), Math.min(y * 100 + 12, last)])
+      .concat([["전체 기간", allMonths[0], last]]);
+    $("mp-foot").innerHTML = presets.map(([t, a, b]) => `<button type="button" data-a="${a}" data-b="${b}">${t}</button>`).join("");
+  }
+  const setPeriod = (a, b) => { S.start = a; S.end = b; closePicker(); syncControls(); render(); };
+  $("f-start").addEventListener("click", (e) => { e.stopPropagation(); openPicker("start"); });
+  $("f-end").addEventListener("click", (e) => { e.stopPropagation(); openPicker("end"); });
+  $("mp-prev").addEventListener("click", () => { mp.year--; renderPicker(); });
+  $("mp-next").addEventListener("click", () => { mp.year++; renderPicker(); });
+  $("mp-grid").addEventListener("click", (e) => {
+    const ym = Number(e.target.dataset.ym);
+    if (!ym || e.target.disabled) return;
+    // 시작이 종료보다 늦어지면(또는 반대) 나머지 한쪽을 같은 월로 맞춘다
+    if (mp.target === "start") setPeriod(ym, Math.max(ym, S.end)); else setPeriod(Math.min(ym, S.start), ym);
+  });
+  $("mp-foot").addEventListener("click", (e) => { if (e.target.dataset.a) setPeriod(Number(e.target.dataset.a), Number(e.target.dataset.b)); });
+  pop.addEventListener("click", (e) => e.stopPropagation());
+  document.addEventListener("click", () => { if (!pop.hidden) closePicker(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pop.hidden) closePicker(); });
   $("f-reset").addEventListener("click", () => { Object.assign(S, DEFAULT); syncControls(); render(); });
 
   const inRange = (m) => m >= S.start && m <= S.end;
   const rangeMonths = (list) => list.filter(inRange);
+  const regionOn = () => S.sgg !== "all" || S.emd !== "all";
+  const regionLabel = () => (S.emd !== "all" ? S.emd : S.sgg !== "all" ? S.sgg : "전체 지역");
+  // 현재 지역 필터에 들어가는 읍면동 인덱스
+  const scopeEmdIdx = () => D.region.emds.map((e, i) => [e, i])
+    .filter(([e]) => (S.emd !== "all" ? e.name === S.emd : S.sgg === "all" || e.sgg === S.sgg)).map(([, i]) => i);
+  // 읍면동 방문객(연령 무관) 월 합계: 선택 지역 범위, 내·외국인 필터 적용
+  function regionMonthValue(m) {
+    const j = D.region.months.indexOf(m);
+    if (j < 0) return null;
+    return sum(scopeEmdIdx().map((i) => D.region[S.visitor][i][j] || 0));
+  }
+  const allRegionMonthValue = (m) => { const j = D.region.months.indexOf(m); return j < 0 ? null : sum(D.region[S.visitor].map((a) => a[j] || 0)); };
 
   // ---------- 계산 ----------
   function ageValue(m, age, sex) {
@@ -114,8 +171,24 @@
     }
     const im = rangeMonths(D.inbound.months);
     out.inbMonths = im;
-    out.inbound = im.length ? sum(im.map((m) => D.inbound.tot[D.inbound.months.indexOf(m)])) : null;
+    out.inbound = im.length ? sum(im.map((m) => D.inbound[S.visitor][D.inbound.months.indexOf(m)])) : null;
+    // 선택 지역(읍면동 데이터, 연령 무관)
+    const rm = rangeMonths(D.region.months);
+    if (regionOn() && rm.length) {
+      out.reg = { months: rm, value: sum(rm.map(regionMonthValue)), all: sum(rm.map(allRegionMonthValue)) };
+      if (rm.every((m) => D.region.months.includes(m - 100))) {
+        out.reg.prev = sum(rm.map((m) => regionMonthValue(m - 100)));
+        out.reg.yoy = out.reg.value / out.reg.prev - 1;
+      }
+    }
     return out;
+  }
+
+  function calcTrendReg() {
+    return rangeMonths(D.region.months).map((m) => {
+      const v = regionMonthValue(m), p = D.region.months.includes(m - 100) ? regionMonthValue(m - 100) : null;
+      return { m, v, p, yoy: p ? v / p - 1 : null };
+    });
   }
 
   function calcTrend() {
@@ -134,11 +207,13 @@
       .filter((e) => S.sgg === "all" || e.sgg === S.sgg)
       .map((e) => {
         const g = (k) => sum(idx.map((j) => D.region[k][e.i][j] || 0));
-        return { ...e, dom: g("dom"), for: g("for"), tot: g("tot") };
+        const pIdx = months.map((m) => D.region.months.indexOf(m - 100));
+        const prev = pIdx.every((j) => j >= 0) ? sum(pIdx.map((j) => D.region[S.visitor][e.i][j] || 0)) : null;
+        return { ...e, dom: g("dom"), for: g("for"), tot: g("tot"), prev };
       })
       .sort((a, b) => b[S.visitor] - a[S.visitor]);
     const total = sum(rows.map((r) => r[S.visitor]));
-    rows.forEach((r, k) => { r.rank = k + 1; r.share = total ? r[S.visitor] / total : null; });
+    rows.forEach((r, k) => { r.rank = k + 1; r.share = total ? r[S.visitor] / total : null; r.yoy = r.prev ? r[S.visitor] / r.prev - 1 : null; });
     return { months, rows, total };
   }
 
@@ -176,15 +251,19 @@
     const months = rangeMonths(V.months);
     const idx = months.map((m) => V.months.indexOf(m));
     const cats = S.scat === "all" ? V.cats : [S.scat];
-    const scope = V.items.map((it, i) => ({ it, i })).filter((x) => cats.includes(x.it.c));
-    const bound = Math.max(0, ...cats.map((c) => sum(idx.map((j) => V.cutoff[c][j]))));
+    // 지역 범위: 읍·면은 주소로 판별, 동은 판별 불가라 시군구로 대체
+    const key = S.emd !== "all" && V.scopes.includes(S.emd) ? S.emd : S.sgg !== "all" ? S.sgg : "all";
+    const fallback = S.emd !== "all" && key !== S.emd;
+    const inReg = (it) => (key === "all" ? true : key === S.emd ? it.emd === key : it.sgg === key);
+    const scope = V.items.map((it, i) => ({ it, i })).filter((x) => cats.includes(x.it.c) && inReg(x.it));
+    const bound = Math.max(0, ...cats.map((c) => sum(idx.map((j) => V.cutoff[key][c][j]))));
     const r = topN(scope, (i) => sum(idx.map((j) => V.v[scope[i].i][j])), bound, 60, (x) => x.it.n);
     const rows = r.top.map((x, k) => {
       const gi = scope[x.i].i;
       return { rank: k + 1, ...scope[x.i].it, v: x.v, rows: sum(idx.map((j) => V.rows[gi][j])) };
     });
-    const catTotals = V.cats.map((c) => ({ c, v: sum(idx.map((j) => V.catTotal[c][j])) }));
-    return { months, rows, exact: r.exact, bound, catTotals };
+    const catTotals = V.cats.map((c) => ({ c, v: sum(idx.map((j) => V.catTotal[key][c][j])) }));
+    return { months, rows, exact: r.exact, bound, catTotals, key, fallback };
   }
 
   // ---------- 렌더링 ----------
@@ -214,7 +293,7 @@
       $("k-yoy-sub").textContent = ""; $("k-share-sub").textContent = "";
     } else {
       $("k-visit").textContent = fmt(k.value) + "명";
-      $("k-visit-sub").textContent = `${ageLbl} 방문객 수 합계 (${k.months.length}개월, 연령대별 방문 데이터)`;
+      $("k-visit-sub").textContent = `${ageLbl} 방문객 수 합계 (${k.months.length}개월, 연령대별 방문 데이터` + (regionOn() ? " · 이 데이터는 지역 구분이 없어 제주 전체)" : ")");
       if (k.yoy != null) {
         $("k-yoy").innerHTML = `<span class="${k.yoy >= 0 ? "up" : "down"}">${k.yoy >= 0 ? "+" : ""}${pct(k.yoy)}</span>`;
         $("k-yoy-sub").textContent = `전년 동기간 ${fmt(k.prevValue)}명 → 선택 기간 ${fmt(k.value)}명 (같은 월끼리 비교)`;
@@ -230,15 +309,22 @@
         $("k-share-sub").textContent = "연령대를 선택하면 계산됩니다.";
       }
     }
+    const regLine = (id, html) => { $(id).hidden = !html; $(id).innerHTML = html || ""; };
+    if (k.reg) {
+      const rl = `<b>선택 지역 ${esc(regionLabel())}</b> · ${esc(VIS_LABEL[S.visitor])} · 연령 구분 없음`;
+      regLine("k-visit-reg", `${rl}<br>읍면동 방문객 ${fmt(k.reg.value)}명 (${k.reg.months.length}개월)`);
+      regLine("k-yoy-reg", `${rl}<br>` + (k.reg.yoy != null ? `전년 동기간 대비 <b class="${k.reg.yoy >= 0 ? "up" : "down"}">${k.reg.yoy >= 0 ? "+" : ""}${pct(k.reg.yoy)}</b> (${fmt(k.reg.prev)} → ${fmt(k.reg.value)}명)` : "전년 비교 데이터 없음(계산 불가)"));
+      regLine("k-share-reg", `${rl}<br>제주 전체 읍면동 합계 중 ${pct(k.reg.value / k.reg.all)}`);
+    } else ["k-visit-reg", "k-yoy-reg", "k-share-reg"].forEach((id) => regLine(id, ""));
     if (k.inbound != null) {
       $("k-inb").textContent = fmt(k.inbound) + "명";
-      $("k-inb-sub").textContent = `월별 입도 관광객(내+외국인) ${k.inbMonths.length}개월 합계 · 연령 구분 없음 · 연령대 데이터와 집계 기준이 달라 직접 비교 불가`;
+      $("k-inb-sub").textContent = `월별 입도 관광객(${VIS_LABEL[S.visitor]}) ${k.inbMonths.length}개월 합계 · 연령·지역 구분 없음 · 연령대 데이터와 집계 기준이 달라 직접 비교 불가`;
     } else { $("k-inb").innerHTML = '<span class="na-v">데이터 없음</span>'; $("k-inb-sub").textContent = "선택 기간에 입도 관광객 데이터가 없습니다."; }
 
     // 방문 추이
     const tr = calcTrend();
-    badges("b-trend", [["기간", 1], ["연령대", 1], ["성별", 1], ["지역", 0]]);
-    $("trend-desc").textContent = `월별 ${ageLbl} 방문객 수 (단위: 명, 연령대별 방문 데이터). 연도별로 선을 나눠 같은 월끼리 비교.`;
+    badges("b-trend", [["기간", 1], ["연령대·성별(왼쪽)", 1], ["지역·내외국인(오른쪽)", 1]]);
+    $("trend-desc").textContent = `왼쪽: 월별 ${ageLbl} 방문객 수(연령대별 방문 데이터, 지역 구분 없음) · 오른쪽: ${regionLabel()} 읍면동 방문객 수(연령 구분 없음, ${VIS_LABEL[S.visitor]}). 두 데이터는 집계 기준이 달라 서로 비교하지 않음. 연도별로 선을 나눠 같은 월끼리 비교.`;
     if (!tr.length) { drawChart("trend", "c-trend", null); show("trend-empty", "선택 기간에 데이터가 없습니다."); }
     else {
       show("trend-empty", "");
@@ -254,7 +340,24 @@
           scales: { x: { title: axisTitle("월") }, y: { title: axisTitle("방문객 수(명)"), ticks: { callback: (v) => fmt(v) } } } },
       });
     }
-    $("t-trend").innerHTML = table([
+    const trR = calcTrendReg();
+    const lineCfg = (rows, title, unit) => {
+      const years = [...new Set(rows.map((r) => Math.floor(r.m / 100)))];
+      return { type: "line",
+        data: { labels: Array.from({ length: 12 }, (_, i) => `${i + 1}월`),
+          datasets: years.map((y) => ({ label: `${y}년`, borderColor: YEAR_COLORS[y] || "#888", backgroundColor: YEAR_COLORS[y] || "#888",
+            data: Array.from({ length: 12 }, (_, i) => { const r = rows.find((x) => x.m === y * 100 + i + 1); return r ? r.v : null; }), tension: 0.25 })) },
+        options: { plugins: { title: { display: true, text: title }, legend: { position: "top" },
+          tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.raw)}${unit}` } } },
+          scales: { x: { title: axisTitle("월") }, y: { title: axisTitle(`방문객 수(${unit})`), ticks: { callback: (v) => fmt(v) } } } } };
+    };
+    if (!trR.length) { drawChart("trendReg", "c-trend-reg", null); show("trend-reg-empty", "선택 기간에 읍면동 방문객 데이터가 없습니다."); }
+    else { show("trend-reg-empty", ""); drawChart("trendReg", "c-trend-reg", lineCfg(trR, `월별 ${regionLabel()} 방문객 수 — ${VIS_LABEL[S.visitor]} (연령 구분 없음)`, "명")); }
+    $("t-trend-reg").innerHTML = `<h3 class="mt">${esc(regionLabel())} 읍면동 방문객(연령 구분 없음)</h3>` + table([
+      { label: "기준연월", get: (r) => ymLabel(r.m) }, { label: "방문객 수(명)", num: 1, get: (r) => fmt(r.v) },
+      { label: "전년 동월(명)", num: 1, get: (r) => (r.p == null ? "데이터 없음" : fmt(r.p)) },
+      { label: "전년 동월 대비", num: 1, get: (r) => (r.yoy == null ? "계산 불가" : (r.yoy >= 0 ? "+" : "") + pct(r.yoy)) }], trR);
+    $("t-trend").innerHTML = `<h3 class="mt">${esc(ageLbl)} 방문객(연령대별 방문)</h3>` + table([
       { label: "기준연월", get: (r) => ymLabel(r.m) }, { label: "방문객 수(명)", num: 1, get: (r) => fmt(r.v) },
       { label: "전년 동월(명)", num: 1, get: (r) => (r.p == null ? "데이터 없음" : fmt(r.p)) },
       { label: "전년 동월 대비", num: 1, get: (r) => (r.yoy == null ? "계산 불가" : (r.yoy >= 0 ? "+" : "") + pct(r.yoy)) }], tr);
@@ -322,7 +425,11 @@
 
     // 검색어
     const sr = calcSearch();
-    badges("b-search", [["기간", 1], ["검색 분류", 1], ["지역", 0], ["연령", 0]]);
+    badges("b-search", [["기간", 1], ["검색 분류", 1], ["지역(주소 기준)", 1], ["연령", 0]]);
+    const RM = D.search.regionMatch;
+    $("search-scope").textContent = (sr.key === "all" ? "지역: 전체" : `지역: ${sr.key} — 주소로 판별한 항목만 집계`) +
+      (sr.fallback ? ` · ${S.emd}은(는) 동 지역이라 도로명 주소로 판별할 수 없어 ${sr.key} 기준으로 표시` : "") +
+      ` (주소 판별률: 시군구 ${pct(RM.sgg / RM.items)}, 읍·면 지역 ${fmt(RM.eupmyeon)}개 항목)`;
     if (!sr.months.length || !sr.rows.length) {
       drawChart("search", "c-search", null); show("search-empty", "선택 조건에 해당하는 비짓제주 데이터가 없습니다.");
       $("c-wc").hidden = true; show("wc-fallback", ""); $("search-exact").textContent = ""; $("search-cats").textContent = "";
@@ -370,23 +477,35 @@
     window.DASH_RESULT = { state: { ...S }, kpi: k, trend: tr, region: rg, places: pl, search: sr, reviews: rv };
   }
 
-  // ---------- 지역별 방문 지도(Leaflet) ----------
-  const MAP_COLORS = ["#deebf7", "#9ecae1", "#6baed6", "#3182bd", "#08519c"];
-  let map = null, geoLayer = null, legendDiv = null, mapScopeKey = null;
+  // ---------- 지역별 방문 지도(Leaflet 히트맵) ----------
+  // 강도 = 읍면동 방문객 수 ÷ 표시 범위 최댓값. 점 위치는 각 읍면동 경계의 면적 중심.
+  // 경계 폴리곤은 투명하게 두고 마우스가 올라가면 설명 툴팁을 띄운다.
+  const HEAT_GRADIENT = { 0.2: "#2ecc71", 0.45: "#9be15d", 0.65: "#ffe14d", 0.82: "#ffa53b", 1.0: "#e8402a" };
+  const HAS_HEAT = HAS_L && typeof L.heatLayer === "function";
+  let map = null, geoLayer = null, heatLayer = null, legendDiv = null, mapScopeKey = null;
+  const BASE_STYLE = { color: "#ffffff", weight: 0.8, opacity: 0.55, fillColor: "#000", fillOpacity: 0.01 };
   function initMap() {
     if (!D.geo) { show("map-warn", "지도 경계 파일(geo/jeju_emd_ver20260701.geojson)이 없어 지도를 표시할 수 없습니다."); $("region-map").hidden = true; return; }
     if (!HAS_L) { show("map-warn", "지도 라이브러리(Leaflet)를 불러오지 못했습니다. 막대그래프와 표로 확인하세요."); $("region-map").hidden = true; return; }
+    if (!HAS_HEAT) show("map-warn", "히트맵 플러그인(Leaflet.heat)을 불러오지 못해 읍면동 색 농도로 대신 표시합니다.");
     map = L.map("region-map", { scrollWheelZoom: false, zoomSnap: 0.25, maxZoom: 14 });
+    map.fitBounds(L.geoJSON(D.geo).getBounds(), { padding: [10, 10] }); // 레이어 추가 전에 화면 범위를 정해야 경계 요소가 바로 생성됨
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
       maxZoom: 16, attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors · 경계: vuski/admdongkor",
     }).addTo(map);
+    if (HAS_HEAT) heatLayer = L.heatLayer([], { radius: 24, blur: 20, maxZoom: 9, max: 1.3, minOpacity: 0.25, gradient: HEAT_GRADIENT }).addTo(map);
     geoLayer = L.geoJSON(D.geo, {
-      onEachFeature: (f, layer) => layer.on("click", () => {
-        const e = D.region.emds.find((x) => String(x.code) === f.properties.adm_cd2);
-        if (!e) return;
-        if (S.emd === e.name) S.emd = "all"; else { S.emd = e.name; S.sgg = e.sgg; }
-        syncControls(); render();
-      }),
+      style: () => BASE_STYLE,
+      onEachFeature: (f, layer) => {
+        layer.on("click", () => {
+          const e = D.region.emds.find((x) => String(x.code) === f.properties.adm_cd2);
+          if (!e) return;
+          if (S.emd === e.name) S.emd = "all"; else { S.emd = e.name; S.sgg = e.sgg; }
+          syncControls(); render();
+        });
+        layer.on("mouseover", () => { if (layer.options.weight < 2.5) layer.setStyle({ color: "#334155", weight: 2, opacity: 0.9 }); });
+        layer.on("mouseout", () => { if (layer.options.weight < 2.5) layer.setStyle({ color: BASE_STYLE.color, weight: BASE_STYLE.weight, opacity: BASE_STYLE.opacity }); });
+      },
     }).addTo(map);
     const legend = L.control({ position: "topright" });
     legend.onAdd = () => (legendDiv = L.DomUtil.create("div", "map-legend"));
@@ -395,29 +514,33 @@
   function renderMap(rg) {
     if (!map) return;
     const byCode = Object.fromEntries(rg.rows.map((r) => [String(r.code), r]));
-    const vals = rg.rows.map((r) => r[S.visitor]).sort((a, b) => a - b);
-    // 5분위 경계(표시 범위 읍면동 기준). 값이 같으면 구간이 합쳐질 수 있음
-    const breaks = vals.length ? [1, 2, 3, 4].map((k) => vals[Math.floor((vals.length * k) / 5)]) : [];
-    const cls = (v) => breaks.filter((b) => v >= b).length;
+    const maxV = Math.max(0, ...rg.rows.map((r) => r[S.visitor]));
+    const minV = rg.rows.length ? Math.min(...rg.rows.map((r) => r[S.visitor])) : 0;
+    const pts = rg.rows.filter((r) => r.center && maxV).map((r) => [r.center[0], r.center[1], r[S.visitor] / maxV]);
+    if (heatLayer) heatLayer.setLatLngs(pts);
     const out = [];
     geoLayer.eachLayer((layer) => {
       const code = layer.feature.properties.adm_cd2, r = byCode[code];
       const sel = r && r.name === S.emd;
-      layer.setStyle(r ? { fillColor: MAP_COLORS[cls(r[S.visitor])], fillOpacity: 0.78, color: sel ? "#e0832b" : "#fff", weight: sel ? 3 : 1 }
-        : { fillColor: "#d1d5db", fillOpacity: 0.35, color: "#fff", weight: 1 });
+      const inten = r && maxV ? r[S.visitor] / maxV : null;
+      const fill = HAS_HEAT ? { fillColor: "#000", fillOpacity: 0.01 } : { fillColor: "#e8402a", fillOpacity: inten ? 0.1 + 0.7 * inten : 0.03 };
+      layer.setStyle(sel ? { ...fill, color: "#e0832b", weight: 3, opacity: 1 } : { ...BASE_STYLE, ...fill });
       if (sel) layer.bringToFront();
       if (layer.getElement()) layer.getElement().setAttribute("data-code", code);
       const nm = layer.feature.properties.adm_nm.replace("제주특별자치도 ", "");
       layer.unbindTooltip().bindTooltip(r
-        ? `<b>${esc(nm)}</b><br>${esc(VIS_LABEL[S.visitor])} ${fmt(r[S.visitor])}명<br>순위 ${r.rank}/${rg.rows.length} · 비중 ${pct(r.share)}`
-        : `<b>${esc(nm)}</b><br>${rg.months.length ? "선택 지역 범위 밖" : "선택 기간 데이터 없음"}`, { sticky: true });
-      out.push({ code, cls: r ? cls(r[S.visitor]) : null, color: r ? MAP_COLORS[cls(r[S.visitor])] : null, value: r ? r[S.visitor] : null });
+        ? `<b>${esc(nm)}</b><br>${esc(VIS_LABEL[S.visitor])} 방문객 <b>${fmt(r[S.visitor])}명</b> (${rg.months.length}개월)` +
+          `<br>순위 ${r.rank}/${rg.rows.length} · 비중 ${pct(r.share)} · 강도 ${Math.round(inten * 100)}%` +
+          `<br>전년 동기간 대비 ${r.yoy == null ? "계산 불가" : (r.yoy >= 0 ? "+" : "") + pct(r.yoy)}` +
+          `<br><small>내국인 ${fmt(r.dom)} · 외국인 ${fmt(r.for)} · 클릭하면 이 지역으로 필터</small>`
+        : `<b>${esc(nm)}</b><br>${rg.months.length ? "선택 지역 범위 밖" : "선택 기간 데이터 없음"}`, { sticky: true, direction: "top", offset: [0, -8] });
+      out.push({ code, value: r ? r[S.visitor] : null, intensity: inten });
     });
-    if (rg.months.length && vals.length) {
-      const edges = [vals[0], ...breaks, vals[vals.length - 1]];
-      legendDiv.innerHTML = `<b>${esc(VIS_LABEL[S.visitor])} 방문객(명)</b>` + MAP_COLORS.map((c, i) =>
-        `<div><i style="background:${c}"></i>${fmt(edges[i])}${i < 4 ? ` ~ ${fmt(edges[i + 1])} 미만` : ` ~ ${fmt(edges[5])}`}</div>`).join("") +
-        `<div><i style="background:#d1d5db"></i>범위 밖·데이터 없음</div><div style="color:#666">5분위 구간(${rg.months.length}개월 합계)</div>`;
+    if (rg.months.length && rg.rows.length) {
+      const grad = Object.entries(HEAT_GRADIENT).sort((x, y) => x[0] - y[0]).map(([k, c]) => `${c} ${Math.round(k * 100)}%`).join(", ");
+      legendDiv.innerHTML = `<b>${esc(VIS_LABEL[S.visitor])} 방문 강도</b><div class="heat-legend" style="background:linear-gradient(90deg, ${grad})"></div>` +
+        `<div class="heat-legend-lbl"><span>${fmt(minV)}</span><span>${fmt(maxV)}명</span></div>` +
+        `<div style="color:#666">${rg.months.length}개월 합계 · 표시 범위 최댓값 기준<br>가까운 지역은 겹쳐 더 진하게 보임<br>마우스를 올리면 상세 수치</div>`;
     } else legendDiv.innerHTML = "<b>선택 기간 데이터 없음</b>";
     const key = S.sgg;
     if (key !== mapScopeKey) {
@@ -427,19 +550,28 @@
       map.invalidateSize();
       map.fitBounds(L.featureGroup(lays).getBounds(), { padding: [10, 10] });
     }
-    window.DASH_MAP = { breaks, features: out };
+    window.DASH_MAP = { maxV, heatPoints: pts, features: out, heat: HAS_HEAT };
   }
 
   // ---------- 온라인 후기 ----------
   function calcReviews() {
     const R = D.reviews;
     if (!R) return null;
-    const posts = R.posts.filter((p) => !S.rperiod || inRange(Math.floor(Number(p.date) / 100)));
+    const notes = [];
+    let posts = R.posts.filter((p) => S.rall || inRange(Math.floor(Number(p.date) / 100)));
+    if (S.age !== 20 && S.age !== "all") { notes.push(`후기는 '20대' 글만 수집해 ${AGE_LABEL(S.age)} 선택 시 표시할 자료가 없습니다.`); posts = []; }
+    const eupmyeon = S.emd !== "all" && S.emd.slice(-1) !== "동";
+    if (S.emd !== "all" && eupmyeon) posts = posts.filter((p) => p.emd.includes(S.emd));
+    else if (regionOn()) {
+      if (S.emd !== "all") notes.push(`${S.emd}은(는) 동 지역이라 요약문 지명으로 판별할 수 없어 ${S.sgg} 기준으로 표시합니다.`);
+      posts = posts.filter((p) => p.sgg.includes(S.sgg));
+    }
+    if (regionOn()) notes.push(`지역은 제목·요약문의 지명 언급(읍·면 이름과 대표 관광지)으로 추정 — 전체 ${R.posts.length}건 중 ${R.posts.filter((p) => p.sgg.length).length}건만 지역 판별 가능.`);
     const topics = R.topics.map((t) => {
       const hits = posts.filter((p) => p.codes[t.id]);
       return { ...t, n: hits.length, share: posts.length ? hits.length / posts.length : null, hits };
     });
-    return { posts, topics, n: posts.length };
+    return { posts, topics, n: posts.length, notes };
   }
 
   function renderReviews() {
@@ -451,12 +583,15 @@
       return null;
     }
     const rv = calcReviews();
-    badges("b-review", [["기간(선택 시)", S.rperiod], ["연령: 제목에 20대 명시 글", 1], ["지역", 0]]);
+    badges("b-review", [["기간(작성일)", !S.rall], ["연령(20대 글만)", 1], ["지역(지명 언급)", 1], ["성별", 0]]);
     $("review-desc").innerHTML = `네이버 블로그 검색 API(${esc(R.collected_at)} 수집) · 검색어 ${R.queries.map((q) => `'${esc(q)}'`).join(", ")} · ` +
       `분석 대상: 제목에 20대·제주가 있고 20대 본인·일행 여행 후기로 분류된 글 <b>${rv.n}건</b>` +
       (rv.n ? ` (작성일 ${ymLabel(Math.floor(Number(rv.posts[0].date) / 100))} ~ ${ymLabel(Math.floor(Number(rv.posts[rv.n - 1].date) / 100))})` : "");
     const small = rv.n && rv.n < 30 ? `선택 조건의 후기가 ${rv.n}건뿐이라 비율 해석에 주의가 필요합니다.` : "";
-    show("review-empty", rv.n ? small : "선택 기간에 작성된 분석 대상 후기가 없습니다. 기간 필터 적용을 해제하면 전체 수집 기간을 봅니다.");
+    const msgs = rv.notes.slice();
+    if (!rv.n) msgs.push("선택 조건에 해당하는 후기가 없습니다. '전체 수집 기간 보기'를 켜거나 지역을 넓혀 보세요.");
+    else if (small) msgs.push(small);
+    show("review-empty", msgs.map(esc).join("<br>"));
     const item = (t) => `<li><details><summary><span>${esc(t.name)}</span><span class="cnt">${t.n}건 · ${pct(t.share, 0)}</span></summary>` +
       `<ul class="ev">${t.hits.slice(0, 6).map((p) => `<li>“${esc(p.codes[t.id])}” <a href="${esc(p.link)}" target="_blank" rel="noopener">원문</a> <small>${esc(p.date)}</small></li>`).join("")}` +
       `${t.n > 6 ? `<li>외 ${t.n - 6}건 (아래 글 목록 참고)</li>` : ""}</ul></details>` +
