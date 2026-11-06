@@ -228,8 +228,20 @@ tr.flash td { animation: flash 1.6s ease-out; }
 .user .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; font-size: 15px; }
 .user button { border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--accent); background: #fff; }
 
-/* 적용 중인 필터 칩 */
-.fchips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 적용 중인 필터 칩 + 분석보고서 내려받기 */
+.fbar { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; }
+.fchips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 320px; min-width: 0; }
+.btn-report { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 700; white-space: nowrap;
+  background: var(--accent); color: #fff; box-shadow: 0 3px 10px rgba(109,79,216,.35); }
+.btn-report svg { width: 16px; height: 16px; fill: currentColor; flex: none; }
+.btn-report:hover:not(:disabled) { background: var(--sb-1); }
+.btn-report:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.btn-report:disabled { opacity: .7; cursor: progress; }
+.sb-filters .btn-report { border-radius: 10px; padding: 8px 10px; background: #ffd84d; color: #2a1f66; box-shadow: none; }
+.sb-filters .btn-report:hover:not(:disabled) { background: #ffe27a; }
+.report-msg { position: fixed; right: 16px; bottom: 16px; z-index: 4500; margin: 0; max-width: min(380px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 12px;
+  background: var(--ink); color: #fff; font-size: 13px; box-shadow: 0 8px 24px rgba(20,10,60,.3); }
+.report-msg.err { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--amber); }
 .fchips .ttl { font-size: 12.5px; color: var(--muted); font-weight: 600; margin-right: 2px; }
 .fchip { --fc: var(--accent); display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; font-size: 12.5px; padding: 4px 6px 4px 10px;
   background: #fff; border: 1px solid color-mix(in srgb, var(--fc) 35%, #fff); color: var(--ink); box-shadow: var(--shadow); }

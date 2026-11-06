@@ -586,8 +586,9 @@
 
     const rv = renderReviews();
     renderOverview(pl, sr, rv);
-    renderSummary({ k, tr, rg, pl, sr, rv, ageLbl, regionLbl });
-    window.DASH_RESULT = { state: { ...S }, kpi: k, trend: tr, region: rg, places: pl, search: sr, reviews: rv };
+    const summary = renderSummary({ k, tr, rg, pl, sr, rv, ageLbl });
+    window.DASH_RESULT = { state: { ...S }, kpi: k, trend: tr, trendReg: trR, region: rg, places: pl, search: sr, reviews: rv,
+      summary, warnings: warn, ageLbl, regionLbl };
     if (typeof syncPresets === "function") syncPresets();
     renderFilterChips();
   }
@@ -950,9 +951,10 @@
   });
 
   // ---------- 분석 결과 요약 ----------
-  function renderSummary({ k, tr, rg, pl, sr, rv, ageLbl, regionLbl }) {
+  function renderSummary({ k, tr, rg, pl, sr, rv, ageLbl }) {
     const fact = [], interp = [], check = [], action = [];
-    const li = (arr) => arr.map((t) => `<li>${t}</li>`).join("") || "<li>현재 필터에서 산출할 항목이 없습니다.</li>";
+    const li = (arr) => arr.map((t) => `<li>${esc(t)}</li>`).join("") || "<li>현재 필터에서 산출할 항목이 없습니다.</li>";
+    const ageAll = S.age === "all", ageNm = AGE_LABEL(S.age);
     if (k.months.length) {
       fact.push(`${ageLbl} 방문객 수: ${fmt(k.value)}명 (${k.months.length}개월 합계)` +
         (k.yoy != null ? `, 전년 동기간 대비 ${k.yoy >= 0 ? "+" : ""}${pct(k.yoy)}` : ", 전년 대비는 비교 데이터가 없어 계산 불가"));
@@ -964,14 +966,14 @@
       fact.push(`월별 최대 ${ymLabel(peak.m)} ${fmt(peak.v)}명, 최소 ${ymLabel(low.m)} ${fmt(low.v)}명`);
     }
     if (rg.months.length && rg.rows.length)
-      fact.push(`${VIS_LABEL[S.visitor]} 방문객 최다 읍면동(${esc(rg.rows.length === D.region.emds.length ? "전체 지역" : S.sgg)} 범위): ${rg.rows.slice(0, 3).map((r) => esc(r.name)).join(", ")} — 연령 무관 전체 방문객 기준`);
+      fact.push(`${VIS_LABEL[S.visitor]} 방문객 최다 읍면동(${rg.rows.length === D.region.emds.length ? "전체 지역" : S.sgg} 범위): ${rg.rows.slice(0, 3).map((r) => r.name).join(", ")} — 연령 무관 전체 방문객 기준`);
     if (pl.rows.length)
-      fact.push(`${PM_LABEL[S.pmetric]} 상위 장소: ${pl.rows.slice(0, 3).map((r) => `${esc(r.n)}(${esc(r.cat)})`).join(", ")} — 연령 무관`);
+      fact.push(`${PM_LABEL[S.pmetric]} 상위 장소: ${pl.rows.slice(0, 3).map((r) => `${r.n}(${r.cat})`).join(", ")} — 연령 무관`);
     if (sr.rows.length)
-      fact.push(`비짓제주 수치 상위: ${sr.rows.slice(0, 3).map((r) => `${esc(r.n)}(${esc(r.c)})`).join(", ")} — 검색 관심 지표이며 방문 수 아님`);
+      fact.push(`비짓제주 수치 상위: ${sr.rows.slice(0, 3).map((r) => `${r.n}(${r.c})`).join(", ")} — 검색 관심 지표이며 방문 수 아님`);
 
     const top = (g, n) => (rv ? rv.topics.filter((t) => t.group === g && t.n > 0).sort((a, b) => b.n - a.n).slice(0, n) : []);
-    const tlist = (arr) => arr.map((t) => `${esc(t.name)} ${t.n}건`).join(", ");
+    const tlist = (arr) => arr.map((t) => `${t.name} ${t.n}건`).join(", ");
     if (rv && rv.n) {
       fact.push(`20대 제주 여행 블로그 후기 ${rv.n}건에서 많이 언급된 활동: ${tlist(top("activity", 3))} (요약문 기준 언급 수)`);
       if (top("complaint", 1).length) fact.push(`불편 관련 언급: ${tlist(top("complaint", 3))} — 표본이 작아 경향으로 보기 어려움`);
@@ -981,7 +983,7 @@
       const pm = peak.m % 100;
       interp.push(`${pm}월에 ${AGE_LABEL(S.age)} 방문이 가장 많아 해당 시기 수요가 높을 가능성. 연도마다 반복되는지 다른 연도와 비교해 확인 필요`);
     }
-    interp.push("지역·장소·검색 데이터에는 연령 정보가 없어, 위 지역·장소 특성이 20대에게도 같게 나타나는지는 알 수 없음");
+    interp.push(`지역·장소·검색 데이터에는 연령 정보가 없어, 위 지역·장소 특성이 ${ageAll ? "연령대별로 어떻게 다른지" : `${ageNm}에게도 같게 나타나는지`}는 알 수 없음`);
     if (rv && rv.n) {
       const ctx = Object.fromEntries(rv.topics.filter((t) => t.group === "context").map((t) => [t.id, t]));
       interp.push(`후기에서 혼자 여행(${ctx.solo.n}건)과 '20대 마지막' 기념 여행(${ctx.last20.n}건) 언급이 많음 — 혼행·기념 여행 수요가 있을 가능성(블로그 작성자 특성이 반영됐을 수 있음)`);
@@ -1000,19 +1002,20 @@
     if (ratio) check.push(`연령대별 방문객 수가 같은 기간 입도 관광객 수의 약 ${ratio.toFixed(1)}배 — 집계 기준(도민 포함 여부, 중복 집계 등) 확인 필요`);
     check.push(D.reviews ? "블로그 후기는 API 요약문(약 200자)만 분석 — 원문 전체 분석 시 만족·불편 언급이 더 많이 잡힐 수 있음. 작성자 연령은 제목 표현으로만 판단(직접 확인 불가)"
       : "온라인 후기 데이터가 없어 주요 활동·만족·불편 요인은 분석하지 못함 — 후기 수집 필요");
-    check.push("20대의 지역·장소·검색 행태: 연령별로 나뉜 지역·장소 데이터 필요");
+    check.push(`${ageAll ? "연령대별" : `${ageNm}의`} 지역·장소·검색 행태: 연령별로 나뉜 지역·장소 데이터 필요`);
     check.push("비짓제주 원본은 월·장소마다 보통 6~7행이며 행을 구분하는 컬럼이 없음 — '수치'의 정의(조회·검색 수 등)와 행 구성 확인 필요");
     check.push(`인기 장소 원본 중 ${fmt(D.places.mismatchRows)}행은 도착건수가 관광객+도민 합보다 1~69건 많음 — 미분류 도착 여부 확인 필요`);
     check.push("와이어프레임의 2023년 기간은 제공 데이터(2024년 1월~)에 없음");
 
-    if (peak && low) action.push(`성수기(${peak.m % 100}월) 전에 청년층 대상 콘텐츠를 집중 홍보하고, 방문이 적은 ${low.m % 100}월에 분산 프로모션 검토`);
-    if (rg.rows.length) action.push(`방문이 많은 ${rg.rows.slice(0, 2).map((r) => esc(r.name)).join("·")} 중심의 코스를 기획하되, 20대 수요는 연령별 데이터로 재확인`);
-    if (sr.rows.length) action.push(`검색 수치 상위 장소·행사(${esc(sr.rows[0].n)} 등)를 홍보와 연계하고, 실제 방문 전환은 도착 데이터로 확인`);
+    if (peak && low) action.push(`성수기(${peak.m % 100}월) 전에 ${S.age === 20 ? "청년층" : ageAll ? "관광객" : ageNm} 대상 콘텐츠를 집중 홍보하고, 방문이 적은 ${low.m % 100}월에 분산 프로모션 검토`);
+    if (rg.rows.length) action.push(`방문이 많은 ${rg.rows.slice(0, 2).map((r) => r.name).join("·")} 중심의 코스를 기획하되, ${ageAll ? "연령별" : ageNm} 수요는 연령별 데이터로 재확인`);
+    if (sr.rows.length) action.push(`검색 수치 상위 장소·행사(${sr.rows[0].n} 등)를 홍보와 연계하고, 실제 방문 전환은 도착 데이터로 확인`);
     if (rv && rv.n) action.push("혼자 여행·뚜벅이 여행자를 위한 대중교통 동선, 게스트하우스 교류 프로그램 등 후기에서 자주 나온 여행 형태에 맞춘 콘텐츠 검토");
     else action.push("후기 데이터를 수집해 만족·불편 요인을 확인한 뒤 콘텐츠를 보완");
 
     $("s-fact").innerHTML = li(fact); $("s-interp").innerHTML = li(interp);
     $("s-check").innerHTML = li(check); $("s-action").innerHTML = li(action);
+    return { fact, interp, check, action };
   }
 
   // ---------- 데이터 기준 표 ----------
@@ -1021,9 +1024,10 @@
       .map((m) => ageValue(m, "all", "all") / D.inbound.tot[D.inbound.months.indexOf(m)]);
     return `${Math.min(...r).toFixed(1)}~${Math.max(...r).toFixed(1)}`;
   }
-  function renderSources() {
-    const span = (l) => `${ymLabel(l[0])} ~ ${ymLabel(l[l.length - 1])}`;
-    const rows = [
+  const span = (l) => `${ymLabel(l[0])} ~ ${ymLabel(l[l.length - 1])}`;
+  const SOURCE_COLS = ["데이터", "기간", "집계 단위", "값(단위)", "사용 패널", "비고"];
+  function sourceRows() {
+    return [
       ["제주 연령대별 방문", span(D.age.months), "월 × 성별(M/W) × 연령(10~70, 10단위)", "방문객수(명)", "방문 규모·추이", `입도 관광객과 기준 다름(월 합계가 같은 달 입도객의 ${ageRatio()}배). 연령 코드 70이 70대 이상인지는 추가 확인 필요`],
       ["월별 입도 관광객", span(D.inbound.months), "월", "내국인·외국인·전체(명)", "참고 지표", "전체 = 내국인 + 외국인 (전 월 일치 확인)"],
       ["제주 지역별 방문객(읍면동)", span(D.region.months), `월 × 읍면동(${D.region.emds.length}개)`, "내국인·외국인·총(명)", "지역별 방문(막대·지도)", "연령 없음. 읍면동 합계는 중복 집계 가능. 지도 경계: 행정동 경계(vuski/admdongkor ver20260701)를 읍면동코드로 43개 모두 연결"],
@@ -1036,7 +1040,9 @@
         "주제 언급 글 수(건)", "온라인 후기", `검색 API 제목·요약문만 사용. 제목에 20대·제주가 있는 글을 사람이 읽고 분류해 ${D.reviews.posts.length}건 선별(reviews/review_labels.csv), 키워드 규칙으로 주제 언급 집계`]
         : ["온라인 후기", "-", "-", "-", "온라인 후기", "제공 데이터 없음 — 추가 확인 필요"],
     ];
-    $("t-sources").innerHTML = table(["데이터", "기간", "집계 단위", "값(단위)", "사용 패널", "비고"].map((l, i) => ({ label: l, get: (r) => r[i] })), rows);
+  }
+  function renderSources() {
+    $("t-sources").innerHTML = table(SOURCE_COLS.map((l, i) => ({ label: l, get: (r) => r[i] })), sourceRows());
     $("gen-time").textContent = `data.js 생성: ${D.generated} (scripts/build_data.py)`;
   }
 
@@ -1044,6 +1050,10 @@
   $("c-wc").addEventListener("wordcloudstop", () => {
     $("wc-status").textContent = `워드클라우드 표시 ${wcStat.drawn}/${wcStat.total}개` + (wcStat.skipped ? ` (공간 부족으로 ${wcStat.skipped}개 생략)` : "");
   });
+  // 분석보고서 PDF(report.js)가 쓰는 값: 화면과 같은 라벨·계산을 재사용해 보고서가 어긋나지 않게 한다
+  window.DASH_REPORT = { data: D, fmt, pct, ymLabel, span, AGE_LABEL, SEX_LABEL, VIS_LABEL, PM_LABEL, YEAR_COLORS, C,
+    SOURCE_COLS, sourceRows, narrowing, monthCount: () => allMonths.filter(inRange).length };
+
   if (!HAS_CHART) show("lib-warn", "차트 라이브러리(Chart.js)를 불러오지 못했습니다. 인터넷 연결을 확인하세요. 지표와 상세 표는 그대로 표시됩니다.");
   syncControls();
   initMap();

@@ -59,6 +59,7 @@
       <label class="sb-field"><span class="lbl">내·외국인 <small>입도객·지역 방문</small></span><select id="f-visitor">
         <option value="tot">전체(내국인+외국인)</option><option value="dom">내국인</option><option value="for">외국인</option></select></label>
       <button id="f-reset" type="button" class="btn-reset">필터 초기화</button>
+      <button type="button" class="btn-report" data-report title="현재 필터 기준으로 분석보고서 PDF를 내려받습니다">분석보고서 PDF 다운로드</button>
     </div>
     <p class="sb-note">필터마다 색이 정해져 있습니다. 패널 배지가 <b>진하게 칠해져 있으면</b> 그 필터가 지금 범위를 좁히고 있다는 뜻이고, 연한 배지는 적용되지만 '전체'로 선택된 상태, 회색은 데이터에 해당 정보가 없어 적용되지 않는 필터입니다.</p>
   </aside>
@@ -86,7 +87,13 @@
       <div class="user"><span class="avatar" aria-hidden="true">👤</span><span id="u-id"></span><button type="button" id="u-logout">로그아웃</button></div>
     </header>
 
-    <div class="fchips" id="fchips" aria-label="적용 중인 필터"></div>
+    <div class="fbar">
+      <div class="fchips" id="fchips" aria-label="적용 중인 필터"></div>
+      <button type="button" class="btn-report" data-report title="현재 필터 기준으로 조사 기본정보·필터 정보·분석 결과를 담은 PDF를 내려받습니다">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3 1.4 1.4L12 17.4l-5.7-5.7 1.4-1.4 3.3 3.3V4a1 1 0 0 1 1-1zM5 19h14v2H5z"/></svg>
+        <span>분석보고서 PDF</span>
+      </button>
+    </div>
     <p id="lib-warn" class="notice" hidden></p>
     <p id="period-warn" class="notice" hidden></p>
 
@@ -238,6 +245,8 @@
   </main>
   <div class="sb-backdrop" id="sb-backdrop" hidden></div>
 </div>
+<p class="report-msg" id="report-msg" role="status" hidden></p>
 <script src="app.js"></script>
+<script src="report.js"></script>
 </body>
 </html>
