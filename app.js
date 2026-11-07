@@ -597,6 +597,7 @@
   // 강도 = 읍면동 방문객 수 ÷ 표시 범위 최댓값. 점 위치는 각 읍면동 경계의 면적 중심.
   // 경계 폴리곤은 투명하게 두고 마우스가 올라가면 설명 툴팁을 띄운다.
   const HEAT_GRADIENT = { 0.2: "#2ecc71", 0.45: "#9be15d", 0.65: "#ffe14d", 0.82: "#ffa53b", 1.0: "#e8402a" };
+  const HEAT = { radius: 24, blur: 20, maxZoom: 9, max: 1.3, minOpacity: 0.25, gradient: HEAT_GRADIENT }; // 보고서 지도도 같은 값을 쓴다
   const HAS_HEAT = HAS_L && typeof L.heatLayer === "function";
   let map = null, geoLayer = null, heatLayer = null, legendDiv = null, mapScopeKey = null;
   const BASE_STYLE = { color: "#ffffff", weight: 0.8, opacity: 0.55, fillColor: "#000", fillOpacity: 0.01 };
@@ -609,7 +610,7 @@
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
       maxZoom: 16, attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors · 경계: vuski/admdongkor",
     }).addTo(map);
-    if (HAS_HEAT) heatLayer = L.heatLayer([], { radius: 24, blur: 20, maxZoom: 9, max: 1.3, minOpacity: 0.25, gradient: HEAT_GRADIENT }).addTo(map);
+    if (HAS_HEAT) heatLayer = L.heatLayer([], HEAT).addTo(map);
     geoLayer = L.geoJSON(D.geo, {
       style: () => BASE_STYLE,
       onEachFeature: (f, layer) => {
@@ -1052,7 +1053,7 @@
   });
   // 분석보고서 PDF(report.js)가 쓰는 값: 화면과 같은 라벨·계산을 재사용해 보고서가 어긋나지 않게 한다
   window.DASH_REPORT = { data: D, fmt, pct, ymLabel, span, AGE_LABEL, SEX_LABEL, VIS_LABEL, PM_LABEL, YEAR_COLORS, C,
-    SOURCE_COLS, sourceRows, narrowing, monthCount: () => allMonths.filter(inRange).length };
+    SOURCE_COLS, sourceRows, narrowing, HEAT, monthCount: () => allMonths.filter(inRange).length };
 
   if (!HAS_CHART) show("lib-warn", "차트 라이브러리(Chart.js)를 불러오지 못했습니다. 인터넷 연결을 확인하세요. 지표와 상세 표는 그대로 표시됩니다.");
   syncControls();

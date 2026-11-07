@@ -21,8 +21,8 @@
   const PAGE_W = 515; // A4 폭 595pt - 좌우 여백 40pt
   const PX = 3; // 차트 이미지 해상도 배율(1pt = 3px)
   const YEAR_MARK = ["circle", "rect", "triangle", "rectRot"]; // 흑백 인쇄에서도 연도를 구분
-  const MAP_RAMP = ["#e4defa", "#c2b5f1", "#9a85e4", "#6f51d4", "#43289f"]; // 한 색상, 연한 색 → 진한 색
-  const MAP_OUT = "#efeef3";
+  const MAP_SEA = "#d3d4d9", MAP_LAND = "#f1f1ef", MAP_SEL = "#e0832b"; // 지도 타일 대신 쓰는 바다·육지 색, 선택 읍면동 테두리
+  const SCREEN_MAP = { w: 640, h: 420, pad: 10, snap: 0.25, maxZoom: 14 }; // 대시보드 지도 크기·맞춤 설정(히트맵 반경 환산용)
 
   const $ = (id) => document.getElementById(id);
   const sum = (a) => a.reduce((x, y) => x + y, 0);
@@ -135,7 +135,7 @@
         plugins: { legend: { display: years.length > 1, position: "top", align: "end", labels: { usePointStyle: true, boxWidth: 6, boxHeight: 6, ...small() } }, tooltip: { enabled: false } },
         scales: {
           x: { grid: { display: false }, ticks: small() },
-          y: { beginAtZero: true, grid: { lineWidth: 0.6 }, border: { display: false }, ticks: { ...small(), maxTicksLimit: 6, callback: (v) => compact(v, A.fmt) } },
+          y: { grid: { lineWidth: 0.6 }, border: { display: false }, ticks: { ...small(), maxTicksLimit: 6, callback: (v) => compact(v, A.fmt) } },
         },
       },
     }, w, h);
@@ -158,11 +158,45 @@
     return url && { image: url, width: w, margin: [0, 0, 0, 6] };
   }
 
-  // 읍면동 단계구분도: 배경 타일 없이 경계 데이터(data.js)로 직접 그린다. 추자면은 본섬에서 멀어 왼쪽 위에 따로 넣는다.
+  // 읍면동 방문 지도: 대시보드 히트맵을 같은 값·같은 설정(A.HEAT)으로 다시 그린다.
+  // 다른 점은 배경뿐이다. 지도 타일 대신 경계 데이터로 육지를 칠하고, 본섬에서 먼 추자면은 왼쪽 위에 따로 넣는다.
+  const rings = (f) => (f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates);
+  function extent(feats) {
+    const b = { x0: 180, x1: -180, y0: 90, y1: -90 };
+    feats.forEach((f) => rings(f).forEach((p) => p.forEach((ring) => ring.forEach(([x, y]) => {
+      b.x0 = Math.min(b.x0, x); b.x1 = Math.max(b.x1, x); b.y0 = Math.min(b.y0, y); b.y1 = Math.max(b.y1, y);
+    }))));
+    return b;
+  }
+  // 대시보드 지도가 이 범위를 화면에 맞출 때의 확대 단계(Leaflet fitBounds와 같은 계산)
+  function screenZoom(feats) {
+    const b = extent(feats), merc = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)), M = SCREEN_MAP;
+    const w = (b.x1 - b.x0) / 360 * 256, h = (merc(b.y1) - merc(b.y0)) / (2 * Math.PI) * 256;
+    const z = Math.log2(Math.min((M.w - 2 * M.pad) / w, (M.h - 2 * M.pad) / h));
+    return Math.min(M.maxZoom, Math.floor(z / M.snap) * M.snap);
+  }
+  // leaflet.heat이 하는 일과 같다: 가까운 점을 칸으로 묶어 강도를 더한 뒤 simpleheat로 그린다
+  function heatCanvas(points, w, h, ratio, zoom, H0) {
+    const radius = H0.radius * ratio, blur = H0.blur * ratio, cell = (radius + blur) / 2;
+    const fade = 1 / Math.pow(2, Math.max(0, Math.min(H0.maxZoom - zoom, 12)));
+    const grid = new Map();
+    points.forEach(([x, y, a]) => {
+      const id = Math.floor(x / cell) + "," + Math.floor(y / cell), k = a * fade, c = grid.get(id);
+      if (!c) { grid.set(id, [x, y, k]); return; }
+      c[0] = (c[0] * c[2] + x * k) / (c[2] + k); c[1] = (c[1] * c[2] + y * k) / (c[2] + k); c[2] += k;
+    });
+    const cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    const heat = simpleheat(cv);
+    heat.radius(radius, blur); heat.gradient(H0.gradient); heat.max(H0.max);
+    heat.data([...grid.values()].map((c) => [Math.round(c[0]), Math.round(c[1]), Math.min(c[2], H0.max)]));
+    heat.draw(H0.minOpacity);
+    return cv;
+  }
   function regionMap(R, A, W) {
-    const D = A.data, S = R.state, rg = R.region, key = S.visitor;
+    const D = A.data, S = R.state, rg = R.region, key = S.visitor, H0 = A.HEAT;
     if (!D.geo || !rg.rows.length) return null;
-    const MAP_H = W * 0.64, LEG_H = 44, H = MAP_H + LEG_H, K = Math.cos(33.4 * Math.PI / 180);
+    const MAP_H = W * 0.64, LEG_H = 38, H = MAP_H + LEG_H, K = Math.cos(33.4 * Math.PI / 180);
     const cv = document.createElement("canvas");
     cv.width = W * PX; cv.height = H * PX;
     const g = cv.getContext("2d");
@@ -170,79 +204,92 @@
     g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
 
     const byCode = Object.fromEntries(rg.rows.map((r) => [String(r.code), r]));
-    const vals = rg.rows.map((r) => r[key]).sort((a, b) => a - b);
-    const cuts = [...new Set([1, 2, 3, 4].map((i) => vals[Math.floor(vals.length * i / 5)]))].filter((v) => v > vals[0]);
-    const ramp = cuts.length >= 4 ? MAP_RAMP : MAP_RAMP.slice(5 - cuts.length - 1);
-    const color = (r) => (!r ? MAP_OUT : ramp[cuts.filter((c) => r[key] >= c).length]);
-
-    const rings = (f) => (f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates);
-    function fit(feats, b) {
-      let x0 = 180, x1 = -180, y0 = 90, y1 = -90;
-      feats.forEach((f) => rings(f).forEach((p) => p.forEach((ring) => ring.forEach(([x, y]) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }))));
-      const s = Math.min(b.w / ((x1 - x0) * K), b.h / (y1 - y0));
-      const ox = b.x + (b.w - (x1 - x0) * K * s) / 2, oy = b.y + (b.h - (y1 - y0) * s) / 2;
-      return (x, y) => [ox + (x - x0) * K * s, oy + (y1 - y) * s];
-    }
-    function trace(f, proj) {
+    const maxV = Math.max(0, ...rg.rows.map((r) => r[key]));
+    const minV = Math.min(...rg.rows.map((r) => r[key]));
+    const fit = (feats, b) => {
+      const e = extent(feats), s = Math.min(b.w / ((e.x1 - e.x0) * K), b.h / (e.y1 - e.y0));
+      const ox = b.x + (b.w - (e.x1 - e.x0) * K * s) / 2, oy = b.y + (b.h - (e.y1 - e.y0) * s) / 2;
+      const proj = (x, y) => [ox + (x - e.x0) * K * s, oy + (e.y1 - y) * s];
+      proj.perLon = K * s; // 경도 1도의 길이(pt)
+      return proj;
+    };
+    const trace = (f, pj) => {
       g.beginPath();
       rings(f).forEach((p) => p.forEach((ring) => {
-        ring.forEach(([x, y], i) => { const [a, b] = proj(x, y); if (i) g.lineTo(a, b); else g.moveTo(a, b); });
+        ring.forEach(([x, y], i) => { const [a, b] = pj(x, y); if (i) g.lineTo(a, b); else g.moveTo(a, b); });
         g.closePath();
       }));
-    }
+    };
     const isChuja = (f) => f.properties.adm_nm.endsWith("추자면");
     const main = D.geo.features.filter((f) => !isChuja(f)), chuja = D.geo.features.filter(isChuja);
-    const proj = fit(main, { x: 4, y: 4, w: W - 8, h: MAP_H - 8 });
-    const box = { x: 3, y: 3, w: W * 0.17, h: W * 0.14 };
+    const proj = fit(main, { x: 6, y: 6, w: W - 12, h: MAP_H - 12 });
+    const box = { x: 5, y: 5, w: W * 0.17, h: W * 0.14 };
     const projC = chuja.length ? fit(chuja, { x: box.x + 5, y: box.y + 11, w: box.w - 10, h: box.h - 15 }) : null;
-    const paint = (f, pj) => {
-      const r = byCode[f.properties.adm_cd2];
+
+    // 대시보드 지도의 확대 단계에서 히트맵 반경이 섬 크기의 몇 분의 일인지를 그대로 옮긴다
+    const scopeFeats = D.geo.features.filter((f) => S.sgg === "all" || f.properties.sggnm === S.sgg);
+    const zoom = screenZoom(scopeFeats);
+    const ratio = proj.perLon * PX / (256 * Math.pow(2, zoom) / 360);
+    const canHeat = typeof window.simpleheat === "function" && maxV > 0;
+    const heatOf = (rows, pj) => heatCanvas(rows.filter((r) => r.center).map((r) => {
+      const [x, y] = pj(r.center[1], r.center[0]);
+      return [x * PX, y * PX, r[key] / maxV];
+    }), W * PX, Math.round(MAP_H * PX), ratio, zoom, H0);
+
+    const land = (feats, pj) => feats.forEach((f) => {
       trace(f, pj);
-      g.fillStyle = color(r); g.fill("evenodd");
-      g.strokeStyle = "#fff"; g.lineWidth = 0.45; g.stroke();
+      g.fillStyle = MAP_LAND; g.fill("evenodd");
+      if (!canHeat) { // 히트맵 도구가 없을 때는 대시보드와 같은 방식으로 읍면동 색 농도로 표시
+        const r = byCode[f.properties.adm_cd2];
+        g.globalAlpha = r && maxV ? 0.1 + 0.7 * r[key] / maxV : 0.03;
+        g.fillStyle = "#e8402a"; g.fill("evenodd"); g.globalAlpha = 1;
+      }
+    });
+    const lines = (feats, pj) => {
+      g.globalAlpha = 0.65; g.strokeStyle = "#fff"; g.lineWidth = 0.6;
+      feats.forEach((f) => { trace(f, pj); g.stroke(); });
+      g.globalAlpha = 1;
     };
-    main.forEach((f) => paint(f, proj));
+    const mainRows = rg.rows.filter((r) => r.name !== "추자면"), chujaRows = rg.rows.filter((r) => r.name === "추자면");
+
+    g.fillStyle = MAP_SEA; g.fillRect(0, 0, W, MAP_H);
+    land(main, proj);
+    if (canHeat) g.drawImage(heatOf(mainRows, proj), 0, 0, W, MAP_H);
+    lines(main, proj);
     if (projC) {
-      g.strokeStyle = LINE; g.lineWidth = 0.7; g.strokeRect(box.x, box.y, box.w, box.h);
-      g.fillStyle = MUTED; g.font = '6.5px "Malgun Gothic", sans-serif'; g.textBaseline = "top"; g.textAlign = "left";
+      g.save();
+      g.beginPath(); g.rect(box.x, box.y, box.w, box.h); g.clip();
+      g.fillStyle = MAP_SEA; g.fillRect(box.x, box.y, box.w, box.h);
+      land(chuja, projC);
+      if (canHeat && chujaRows.length) g.drawImage(heatOf(chujaRows, projC), 0, 0, W, MAP_H);
+      lines(chuja, projC);
+      g.restore();
+      g.strokeStyle = "#fff"; g.lineWidth = 0.8; g.strokeRect(box.x, box.y, box.w, box.h);
+      g.fillStyle = INK; g.font = '6.5px "Malgun Gothic", sans-serif'; g.textBaseline = "top"; g.textAlign = "left";
       g.fillText("추자면", box.x + 3, box.y + 2.5);
-      chuja.forEach((f) => paint(f, projC));
     }
     D.geo.features.forEach((f) => { // 선택 읍면동 강조
       const r = byCode[f.properties.adm_cd2];
-      if (r && r.name === S.emd) { trace(f, isChuja(f) ? projC : proj); g.strokeStyle = A.C.amber; g.lineWidth = 1.5; g.stroke(); }
-    });
-    // 상위 5곳 순위 표시(표의 순위와 같음)
-    g.font = 'bold 6.5px "Malgun Gothic", sans-serif'; g.textAlign = "center"; g.textBaseline = "middle";
-    rg.rows.slice(0, 5).forEach((r, i) => {
-      if (!r.center || r.name === "추자면") return;
-      const [x, y] = proj(r.center[1], r.center[0]);
-      g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2);
-      g.fillStyle = "#fff"; g.fill(); g.strokeStyle = INK; g.lineWidth = 0.6; g.stroke();
-      g.fillStyle = INK; g.fillText(String(i + 1), x, y + 0.3);
+      if (r && r.name === S.emd) { trace(f, isChuja(f) ? projC : proj); g.strokeStyle = MAP_SEL; g.lineWidth = 1.5; g.stroke(); }
     });
 
-    // 범례: 구간별 방문객 수
-    const bounds = [vals[0], ...cuts, vals[vals.length - 1]];
-    const y0 = MAP_H + 6;
-    g.textAlign = "left"; g.textBaseline = "middle"; g.font = '7px "Malgun Gothic", sans-serif'; g.fillStyle = MUTED;
-    g.fillText(`${clean(A.VIS_LABEL[key])} 방문객 수(명) · 진할수록 많음 · 숫자는 순위`, 2, y0);
-    const cell = (W - 4) / ramp.length;
-    ramp.forEach((c, i) => {
-      const x = 2 + i * cell;
-      g.fillStyle = c; g.fillRect(x, y0 + 7, cell - 2, 7);
-      g.fillStyle = INK; g.font = '6.5px "Malgun Gothic", sans-serif';
-      g.fillText(`${compact(bounds[i], A.fmt)}~${compact(bounds[i + 1], A.fmt)}`, x, y0 + 20);
-    });
-    const extra = [];
-    if (S.sgg !== "all") extra.push(["#fill", MAP_OUT, "선택 범위 밖"]);
-    if (S.emd !== "all") extra.push(["#line", A.C.amber, `선택: ${S.emd}`]);
-    let ex = 2;
-    extra.forEach(([kind, c, t]) => {
-      if (kind === "#fill") { g.fillStyle = c; g.fillRect(ex, y0 + 26, 9, 6); } else { g.strokeStyle = c; g.lineWidth = 1.2; g.strokeRect(ex, y0 + 26, 9, 6); }
-      g.fillStyle = MUTED; g.font = '6.5px "Malgun Gothic", sans-serif'; g.fillText(t, ex + 12, y0 + 29.5);
-      ex += 18 + g.measureText(t).width + 8;
-    });
+    // 범례: 대시보드 지도와 같은 내용
+    const y0 = MAP_H + 7, stops = Object.entries(H0.gradient).sort((a, b) => a[0] - b[0]);
+    g.textAlign = "left"; g.textBaseline = "middle"; g.font = 'bold 7px "Malgun Gothic", sans-serif'; g.fillStyle = INK;
+    g.fillText(`${clean(A.VIS_LABEL[key])} 방문 강도 (${rg.months.length}개월 합계)`, 2, y0);
+    const bar = g.createLinearGradient(2, 0, 112, 0);
+    stops.forEach(([k, c]) => bar.addColorStop(Number(k), c));
+    g.fillStyle = bar; g.fillRect(2, y0 + 6, 110, 6);
+    g.font = '6.5px "Malgun Gothic", sans-serif'; g.fillStyle = INK;
+    g.fillText(A.fmt(minV), 2, y0 + 17);
+    g.textAlign = "right"; g.fillText(`${A.fmt(maxV)}명`, 112, y0 + 17);
+    g.textAlign = "left"; g.fillStyle = MUTED;
+    g.fillText("표시 범위 최댓값 기준", 120, y0 + 7);
+    g.fillText("가까운 지역은 겹쳐 더 진하게 보임", 120, y0 + 16);
+    if (S.emd !== "all") {
+      g.strokeStyle = MAP_SEL; g.lineWidth = 1.2; g.strokeRect(2, y0 + 23, 9, 6);
+      g.fillText(`선택: ${S.emd}`, 14, y0 + 26.5);
+    }
     return { image: cv.toDataURL("image/png"), width: W };
   }
 
